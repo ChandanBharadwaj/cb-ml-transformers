@@ -353,7 +353,7 @@ figure.anim .fig-title {
 
 /* SVG element states driven by StepPlayer */
 .sp-hide { opacity: 0; }
-figure.anim svg * { transition: opacity 0.45s ease, transform 0.45s ease; }
+figure.anim svg * { transition: opacity 0.8s ease, transform 0.8s ease; }
 figure.anim svg .no-trans, figure.anim svg .no-trans * { transition: none; }
 
 /* SVG palette classes */

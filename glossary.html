@@ -19,10 +19,14 @@
   <p><strong>Dimension</strong> — one slot in a vector. all-MiniLM's embeddings have 384 of them. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>
   <p><strong>Dot product</strong> — multiply two vectors slot-by-slot and add it all up; one number measuring agreement. → <a href="01-math/dot-product-similarity.html">Dot Product = Similarity</a></p>
 
+  <h2>B</h2>
+  <p><strong>Bias</strong> — the learned vector added after a layer's matrix multiply (the +b in Wx + b); lets the layer shift space, not just warp it. → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
+
   <h2>E</h2>
   <p><strong>Embedding</strong> — a learned vector that represents meaning, placed so that similar things are near each other. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>
 
   <h2>G</h2>
+  <p><strong>Gradient (mini-batch / SGD)</strong> — real training estimates the slope on a small random batch instead of the whole dataset: noisier, vastly cheaper, and the noise even helps. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
   <p><strong>Gradient</strong> — the slope of the loss in every direction at once; points uphill, so training steps the other way. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
   <p><strong>Gradient descent</strong> — repeat: measure the slope, step downhill. The algorithm behind all model training. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
 
@@ -33,8 +37,14 @@
   <h2>M</h2>
   <p><strong>Matrix</strong> — a grid of numbers that transforms vectors; every "layer" of a neural network is one (plus a bend). → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
 
+  <h2>N</h2>
+  <p><strong>Norm / normalization</strong> — a vector's length (√ of summed squares); dividing by it gives a unit vector so only direction carries meaning. MiniLM normalizes its outputs. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>
+
   <h2>P</h2>
   <p><strong>Parameter</strong> — one learned number inside a model. "7B model" = seven billion of these. → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
+
+  <h2>S</h2>
+  <p><strong>Similarity matrix</strong> — every pairwise cosine at once (E·Eᵀ): diagonal of 1s, symmetric, topic clusters visible as blocks. The same grid shape underlies attention (M5) and contrastive training (M9). → <a href="01-math/dot-product-similarity.html">Dot Product = Similarity</a></p>
 
   <h2>V</h2>
   <p><strong>Vector</strong> — an ordered list of numbers; equivalently a point or an arrow in space. The universal currency of ML. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>

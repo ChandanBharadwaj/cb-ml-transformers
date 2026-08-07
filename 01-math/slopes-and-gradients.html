@@ -63,14 +63,14 @@
       <!-- loss curve: valley near x=400 -->
       <path d="M 60 70 C 180 90, 240 210, 330 268 C 390 305, 430 305, 470 280 C 520 248, 560 190, 600 120"
             fill="none" stroke="#94a3b8" stroke-width="3.5"/>
-      <text x="70" y="46" font-size="14" fill="#64748b">loss (how wrong)</text>
-      <text x="560" y="360" font-size="14" fill="#64748b">knob w →</text>
+      <text x="70" y="46" font-size="18" fill="#64748b">loss (how wrong)</text>
+      <text x="545" y="362" font-size="18" fill="#64748b">knob w →</text>
 
       <!-- ball positions along the curve -->
       <g id="ball0"><circle cx="130" cy="98" r="11" class="sv-a"/></g>
       <g id="slope0" class="sp-hide">
         <line x1="70" y1="66" x2="200" y2="140" stroke="#d97706" stroke-width="3" stroke-dasharray="6 4"/>
-        <text x="208" y="130" font-size="13.5" fill="#b45309" font-weight="650">steep slope → big step</text>
+        <text x="208" y="130" font-size="18" fill="#b45309" font-weight="650">steep slope → big step</text>
       </g>
       <g id="ball1" class="sp-hide"><circle cx="265" cy="215" r="11" class="sv-a"/></g>
       <g id="slope1" class="sp-hide">
@@ -79,12 +79,12 @@
       <g id="ball2" class="sp-hide"><circle cx="355" cy="285" r="11" class="sv-a"/></g>
       <g id="slope2" class="sp-hide">
         <line x1="300" y1="260" x2="410" y2="304" stroke="#d97706" stroke-width="3" stroke-dasharray="6 4"/>
-        <text x="418" y="330" font-size="13.5" fill="#b45309" font-weight="650">gentler slope → smaller step</text>
+        <text x="470" y="332" text-anchor="middle" font-size="18" fill="#b45309" font-weight="650">gentler slope → smaller step</text>
       </g>
       <g id="ball3" class="sp-hide"><circle cx="418" cy="300" r="11" class="sv-a"/></g>
       <g id="flat" class="sp-hide">
         <line x1="368" y1="300" x2="468" y2="300" stroke="#059669" stroke-width="3"/>
-        <text x="418" y="345" text-anchor="middle" font-size="14" fill="#047857" font-weight="650">slope ≈ 0: valley found, training done</text>
+        <text x="418" y="345" text-anchor="middle" font-size="18" fill="#047857" font-weight="650">slope ≈ 0: valley found, training done</text>
       </g>
       <g id="trail" class="sp-hide">
         <path d="M 130 98 C 200 150, 240 190, 265 215 C 310 255, 335 275, 355 285 C 380 295, 400 300, 418 300"
@@ -105,7 +105,7 @@
           { caption: "New position, new slope. Still descending.", show: ["#ball1", "#slope1"], hide: ["#slope0", "#ball0"] },
           { caption: "The ground is flattening — steps naturally shrink as slope shrinks.", show: ["#ball2", "#slope2"], hide: ["#ball1", "#slope1"] },
           { caption: "Slope ≈ 0: nothing tilts anymore. We've reached a valley — a knob setting where the model is (locally) as right as it can be.", show: ["#ball3", "#flat"], hide: ["#ball2", "#slope2"] },
-          { caption: "The whole journey: measure tilt, step downhill, repeat. That loop <b>is</b> training. Everything else is bookkeeping.", show: ["#trail"], holdMs: 3400 }
+          { caption: "The whole journey: measure tilt, step downhill, repeat. That loop <b>is</b> training. Everything else is bookkeeping.", show: ["#trail"], holdMs: 5000 }
         ]
       });
     });
@@ -151,8 +151,8 @@
         <ellipse cx="320" cy="190" rx="130" ry="72" fill="none" stroke="#cbd5e1" stroke-width="2"/>
         <ellipse cx="320" cy="190" rx="66" ry="36" fill="none" stroke="#94a3b8" stroke-width="2"/>
         <circle cx="320" cy="190" r="7" fill="#059669"/>
-        <text x="320" y="172" text-anchor="middle" font-size="13" fill="#047857" font-weight="650">minimum</text>
-        <text x="86" y="52" font-size="13" fill="#94a3b8">bird's-eye view: each ring = one altitude</text>
+        <text x="320" y="172" text-anchor="middle" font-size="17" fill="#047857" font-weight="650">minimum</text>
+        <text x="86" y="52" font-size="17" fill="#94a3b8">bird's-eye view: each ring = one altitude</text>
       </g>
 
       <!-- too small: crawling dots from left -->
@@ -160,21 +160,21 @@
         <circle cx="80" cy="240" r="6" class="sv-a"/><circle cx="102" cy="236" r="6" class="sv-a"/>
         <circle cx="124" cy="232" r="6" class="sv-a"/><circle cx="146" cy="228" r="6" class="sv-a"/>
         <circle cx="168" cy="225" r="6" class="sv-a"/><circle cx="188" cy="222" r="6" class="sv-a"/>
-        <text x="88" y="278" font-size="13.5" fill="#1d4ed8" font-weight="650">η too small: crawling…</text>
+        <text x="88" y="278" font-size="18" fill="#1d4ed8" font-weight="650">η too small: crawling…</text>
       </g>
 
       <!-- too big: bouncing across -->
       <g id="big" class="sp-hide">
         <path d="M 540 90 L 180 300 L 520 260 L 210 110 L 500 210" fill="none" stroke="#dc2626" stroke-width="2.5" marker-end="url(#lr-r)"/>
         <circle cx="540" cy="90" r="6" fill="#dc2626"/>
-        <text x="440" y="330" font-size="13.5" fill="#dc2626" font-weight="650">η too big: overshooting every time</text>
+        <text x="400" y="334" text-anchor="middle" font-size="18" fill="#dc2626" font-weight="650">η too big: overshooting every time</text>
       </g>
 
       <!-- just right -->
       <g id="right" class="sp-hide">
         <path d="M 90 110 L 210 150 L 285 172 L 312 184 L 320 190" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#lr-g)"/>
         <circle cx="90" cy="110" r="6" fill="#059669"/>
-        <text x="88" y="94" font-size="13.5" fill="#047857" font-weight="650">η right: fast, then settling</text>
+        <text x="88" y="94" font-size="18" fill="#047857" font-weight="650">η right: fast, then settling</text>
       </g>
       <defs>
         <marker id="lr-r" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#dc2626"/></marker>
@@ -193,7 +193,7 @@
           { caption: "The loss landscape from above — a contour map. Every training run is a walk on this map toward the green minimum." },
           { caption: "<b>η too small:</b> steps so tiny that after six updates we've barely moved. Training would take forever (and cost a fortune in GPU hours).", show: ["#small"] },
           { caption: "<b>η too big:</b> every step overshoots the valley and lands on the far slope. The loss zig-zags or blows up — the classic 'my loss is NaN' disaster.", show: ["#big"] },
-          { caption: "<b>η right:</b> confident early steps, settling gently into the minimum. In practice you'll also <i>schedule</i> η — start bigger, shrink over time (M3).", show: ["#right"], hide: ["#small", "#big"], holdMs: 3600 }
+          { caption: "<b>η right:</b> confident early steps, settling gently into the minimum. In practice you'll also <i>schedule</i> η — start bigger, shrink over time (M3).", show: ["#right"], hide: ["#small", "#big"], holdMs: 5200 }
         ]
       });
     });
@@ -210,6 +210,28 @@
       individual steps produce large collective movement.
     </p>
   </div>
+
+  <h2>Mini-batches: noisy but cheap downhill</h2>
+
+  <p>
+    One practical twist separates the textbook picture from real training. Measuring the
+    <em>true</em> slope would mean evaluating the loss on the <strong>entire dataset</strong>
+    for every single step — billions of examples per nudge. Nobody does that. Instead,
+    each step measures the slope on a small random <strong>mini-batch</strong> (32, 256,
+    or a few thousand examples), which gives a cheap, slightly-wrong estimate of the
+    downhill direction. This is <strong>stochastic gradient descent (SGD)</strong> —
+    "stochastic" = the randomness of the batch.
+  </p>
+  <p>
+    The surprise is that the noise <em>helps</em>. A slightly drunk walk downhill
+    jitters the ball out of narrow cracks and saddle points that a perfectly precise
+    descent would get stuck in, and tends to settle in wide, flat valleys — which
+    (for reasons M3 revisits) generalize better to unseen data. So when you see
+    <code>batch_size=32</code> in a config, read it as: "how many examples we average
+    over before each step — bigger = smoother but more memory, smaller = noisier but
+    cheaper." That trade-off is one of the three knobs (with learning rate and epochs)
+    you'll actually turn when fine-tuning anything in M8.
+  </p>
 
   <h2>The only calculus you need: slopes chain</h2>
 

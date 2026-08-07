@@ -32,6 +32,9 @@
      attn- (attention), lbl- (labels), stp- (step-specific).
    - Palette classes from site.css: .sv-a .sv-b .sv-c .sv-dim .sv-ink
    - Captions: <= 2 sentences, written as narration.
+   - TEXT SCALE: minimum font-size 17 viewBox-units on a 640-wide
+     viewBox (renders ~10px on a 375px phone). Primary labels 19-21,
+     headings 22-24. Never go below 17 — mobile readability rule.
 
    The engine precomputes the cumulative state of every touched
    element at every step, so prev/scrub jump instantly and
@@ -55,7 +58,7 @@
     if (!this.svg) { console.warn("StepPlayer: svg not found", opts.svg); return; }
     this.figure = this.svg.closest("figure") || this.svg.parentNode;
     this.steps = opts.steps || [];
-    this.autoplayMs = opts.autoplayMs || 2600;
+    this.autoplayMs = opts.autoplayMs || 4000;
     this.loop = !!opts.loop;
     this.idx = -1;             /* -1 = pristine authored state, shown as step 0 */
     this.playing = false;
