@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dot Product = Similarity — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="01-math/dot-product-similarity">
+<main id="content">
+
+  <h1>Dot Product = Similarity</h1>
+
+  <p>
+    This page teaches <strong>one</strong> operation. It happens to be the operation your
+    vector database runs on every query, the operation inside every neuron, and — when you
+    reach Module 5 — the operation attention uses to decide which words look at which.
+    Learn it once here, and you'll recognize it everywhere for the rest of the course.
+  </p>
+
+  <h2>Multiply-and-add. That's it.</h2>
+
+  <p>
+    The <strong>dot product</strong> of two vectors: multiply them slot by slot, add up the
+    results. One number out.
+  </p>
+
+  <div class="formula">
+    <div class="math">a · b &nbsp;=&nbsp; a₁b₁ + a₂b₂ + … + aₙbₙ</div>
+    <div class="plain">
+      <b>In plain words:</b> line the two lists up, multiply each pair, sum everything.
+      Two vectors go in, <b>one number</b> comes out — and that number measures agreement.
+    </div>
+  </div>
+
+  <figure class="anim" id="fig-dot">
+    <div class="fig-title">Animation · Dot product, slot by slot</div>
+    <svg viewBox="0 0 640 340" aria-labelledby="fig-dot-t">
+      <title id="fig-dot-t">Step-by-step dot product of two 4-dimensional vectors</title>
+
+      <text x="60" y="66" font-size="16" class="mono sv-ink">a =</text>
+      <g id="va">
+        <rect x="105" y="42" width="56" height="38" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text id="a1" x="133" y="67" text-anchor="middle" font-size="16" class="mono" fill="#1d4ed8">2</text>
+        <rect x="169" y="42" width="56" height="38" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text id="a2" x="197" y="67" text-anchor="middle" font-size="16" class="mono" fill="#1d4ed8">1</text>
+        <rect x="233" y="42" width="56" height="38" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text id="a3" x="261" y="67" text-anchor="middle" font-size="16" class="mono" fill="#1d4ed8">0</text>
+        <rect x="297" y="42" width="56" height="38" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text id="a4" x="325" y="67" text-anchor="middle" font-size="16" class="mono" fill="#1d4ed8">3</text>
+      </g>
+      <text x="60" y="136" font-size="16" class="mono sv-ink">b =</text>
+      <g id="vb">
+        <rect x="105" y="112" width="56" height="38" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text id="b1" x="133" y="137" text-anchor="middle" font-size="16" class="mono" fill="#b45309">1</text>
+        <rect x="169" y="112" width="56" height="38" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text id="b2" x="197" y="137" text-anchor="middle" font-size="16" class="mono" fill="#b45309">4</text>
+        <rect x="233" y="112" width="56" height="38" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text id="b3" x="261" y="137" text-anchor="middle" font-size="16" class="mono" fill="#b45309">5</text>
+        <rect x="297" y="112" width="56" height="38" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text id="b4" x="325" y="137" text-anchor="middle" font-size="16" class="mono" fill="#b45309">2</text>
+      </g>
+
+      <!-- products row -->
+      <g id="p1" class="sp-hide">
+        <line x1="133" y1="84" x2="133" y2="108" stroke="#94a3b8" stroke-width="2"/>
+        <rect x="105" y="182" width="56" height="38" rx="8" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="133" y="207" text-anchor="middle" font-size="15" class="mono" fill="#047857">2×1=2</text>
+      </g>
+      <g id="p2" class="sp-hide">
+        <line x1="197" y1="84" x2="197" y2="108" stroke="#94a3b8" stroke-width="2"/>
+        <rect x="169" y="182" width="56" height="38" rx="8" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="197" y="207" text-anchor="middle" font-size="15" class="mono" fill="#047857">1×4=4</text>
+      </g>
+      <g id="p3" class="sp-hide">
+        <line x1="261" y1="84" x2="261" y2="108" stroke="#94a3b8" stroke-width="2"/>
+        <rect x="233" y="182" width="56" height="38" rx="8" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="261" y="207" text-anchor="middle" font-size="15" class="mono" fill="#047857">0×5=0</text>
+      </g>
+      <g id="p4" class="sp-hide">
+        <line x1="325" y1="84" x2="325" y2="108" stroke="#94a3b8" stroke-width="2"/>
+        <rect x="297" y="182" width="56" height="38" rx="8" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="325" y="207" text-anchor="middle" font-size="15" class="mono" fill="#047857">3×2=6</text>
+      </g>
+
+      <g id="sum" class="sp-hide">
+        <text x="380" y="207" font-size="16" class="mono sv-ink">→ 2+4+0+6</text>
+        <rect x="420" y="252" width="120" height="48" rx="10" fill="#2563eb"/>
+        <text x="480" y="283" text-anchor="middle" font-size="20" class="mono" fill="#ffffff" font-weight="700">a·b = 12</text>
+      </g>
+      <g id="lbl-one" class="sp-hide">
+        <text x="320" y="322" text-anchor="middle" font-size="14.5" fill="#64748b">two whole vectors → one single number</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-dot-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-dot svg",
+        caption: "#fig-dot-cap",
+        steps: [
+          { caption: "Two vectors, four slots each. (In your stack: 384 slots — the process is identical.)" },
+          { caption: "Slot 1: multiply the pair. <b>2 × 1 = 2</b>.", show: ["#p1"] },
+          { caption: "Slot 2: <b>1 × 4 = 4</b>.", show: ["#p2"] },
+          { caption: "Slot 3: <b>0 × 5 = 0</b>. A zero in either vector kills that slot's contribution — remember this.", show: ["#p3"] },
+          { caption: "Slot 4: <b>3 × 2 = 6</b>.", show: ["#p4"] },
+          { caption: "Add them up: <b>12</b>. That's the dot product.", show: ["#sum"] },
+          { caption: "Two whole vectors compressed into one number that measures how much they agree, slot by slot.", show: ["#lbl-one"], holdMs: 3200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>What the number means: agreement</h2>
+
+  <p>
+    Look at when the dot product gets <em>big</em>: when the two vectors have large values
+    <strong>in the same slots with the same signs</strong>. Positive×positive adds,
+    negative×negative also adds, mismatched signs subtract, and a zero contributes nothing.
+    So the dot product is literally a score of <strong>slot-by-slot agreement</strong>.
+  </p>
+  <p>
+    Geometrically, the same fact looks like this: the dot product measures
+    <strong>how much one arrow points along the other</strong>. Arrows pointing the same
+    way → large positive. Perpendicular → zero (no agreement, no disagreement).
+    Opposite ways → negative.
+  </p>
+
+  <h2>Cosine similarity: dot product with the lengths removed</h2>
+
+  <p>
+    One problem: the raw dot product also grows when a vector is simply <em>longer</em>
+    (bigger numbers overall) — a loud vector would beat a relevant one. For comparing
+    <em>meanings</em> we only care about <strong>direction</strong>. So we divide out both
+    lengths:
+  </p>
+
+  <div class="formula">
+    <div class="math">cos(a, b) &nbsp;=&nbsp; (a · b) / (‖a‖ ‖b‖)</div>
+    <div class="plain">
+      <b>In plain words:</b> the dot product, after shrinking both arrows to length 1 so
+      only their directions matter. ‖a‖ ("norm") is just the arrow's length:
+      √(a₁² + a₂² + …). The result is always between <b>−1</b> (opposite) through
+      <b>0</b> (unrelated) to <b>+1</b> (same direction).
+    </div>
+  </div>
+
+  <figure class="anim" id="fig-cos">
+    <div class="fig-title">Animation · Cosine = the angle between meanings</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-cos-t">
+      <title id="fig-cos-t">Cosine similarity as the angle between two arrows</title>
+      <g>
+        <line x1="80" y1="300" x2="620" y2="300" stroke="#e2e8f0" stroke-width="2"/>
+        <line x1="100" y1="40" x2="100" y2="330" stroke="#e2e8f0" stroke-width="2"/>
+      </g>
+      <!-- fixed arrow a -->
+      <g id="arrow-a">
+        <line x1="100" y1="300" x2="480" y2="160" stroke="#2563eb" stroke-width="4.5" marker-end="url(#dc-a)"/>
+        <text x="490" y="150" font-size="15" fill="#1d4ed8" font-weight="700">"reset my password"</text>
+      </g>
+      <!-- rotating arrow b: three positions -->
+      <g id="b-close">
+        <line x1="100" y1="300" x2="500" y2="196" stroke="#d97706" stroke-width="4.5" marker-end="url(#dc-b)"/>
+        <text x="508" y="206" font-size="15" fill="#b45309" font-weight="700">"password reset steps"</text>
+      </g>
+      <g id="b-mid" class="sp-hide">
+        <line x1="100" y1="300" x2="420" y2="66" stroke="#d97706" stroke-width="4.5" marker-end="url(#dc-b)"/>
+        <text x="428" y="60" font-size="15" fill="#b45309" font-weight="700">"update billing info"</text>
+      </g>
+      <g id="b-far" class="sp-hide">
+        <line x1="100" y1="300" x2="130" y2="52" stroke="#d97706" stroke-width="4.5" marker-end="url(#dc-b)"/>
+        <text x="140" y="52" font-size="15" fill="#b45309" font-weight="700">"pasta recipes"</text>
+      </g>
+      <!-- score box -->
+      <g id="score">
+        <rect x="404" y="288" width="216" height="44" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text id="score-txt" x="512" y="317" text-anchor="middle" font-size="17" class="mono sv-ink">cos ≈ 0.87</text>
+      </g>
+      <g id="lbl-angle" class="sp-hide">
+        <path id="angle-arc" d="M 220 256 A 130 130 0 0 0 235 251" fill="none" stroke="#059669" stroke-width="3"/>
+        <text x="252" y="240" font-size="14" fill="#047857" font-weight="650">small angle = high cosine</text>
+      </g>
+      <defs>
+        <marker id="dc-a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#2563eb"/></marker>
+        <marker id="dc-b" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#d97706"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-cos-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-cos svg",
+        caption: "#fig-cos-cap",
+        steps: [
+          { caption: "Blue arrow: your query's embedding. Orange: a document chunk that means nearly the same thing. Tiny angle → <b>cos ≈ 0.87</b>.",
+            show: ["#lbl-angle"] },
+          { caption: "A related-but-different chunk points elsewhere. Bigger angle → <b>cos ≈ 0.45</b>.",
+            show: ["#b-mid"], hide: ["#b-close", "#lbl-angle"],
+            attrs: { "#score-txt": { textContent: "cos ≈ 0.45" } } },
+          { caption: "An unrelated chunk points in a barely-overlapping direction → <b>cos ≈ 0.09</b>.",
+            show: ["#b-far"], hide: ["#b-mid"],
+            attrs: { "#score-txt": { textContent: "cos ≈ 0.09" } } },
+          { caption: "Your vector DB computes exactly this score between the query and <b>every</b> stored chunk, then returns the top-k. That's retrieval.",
+            show: ["#b-close"], hide: ["#b-far"],
+            attrs: { "#score-txt": { textContent: "cos ≈ 0.87 → top-1 ✓" } }, holdMs: 3400 }
+        ]
+      });
+    });
+  </script>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      With <code>all-MiniLM-L6-v2</code>:
+      cos(<em>"How do I reset my password?"</em>, <em>"Steps to reset your password"</em>) ≈ <strong>0.88</strong> ·
+      cos(<em>"How do I reset my password?"</em>, <em>"Update your billing address"</em>) ≈ <strong>0.31</strong> ·
+      cos(<em>"How do I reset my password?"</em>, <em>"Best pasta in Bengaluru"</em>) ≈ <strong>0.04</strong>.
+      Useful calibration: for this model, unrelated text usually scores 0.0–0.2,
+      topically related 0.3–0.6, near-paraphrase 0.7+. There is no universal threshold —
+      every model has its own score climate, which is why you tune cutoffs empirically.
+    </p>
+  </div>
+
+  <h2>Why cosine and not plain distance?</h2>
+
+  <p>
+    You could also compare vectors by <strong>Euclidean distance</strong> (straight-line
+    distance between the points). For text embeddings, cosine is the default because
+    embedding models mostly encode meaning in <em>direction</em>, while vector length can
+    drift with text length and token statistics — noise you'd rather ignore. Bonus fact:
+    MiniLM's vectors come out <strong>normalized</strong> (length 1). For unit vectors,
+    cosine, dot product, and Euclidean distance all rank neighbors identically — so your
+    vector DB can pick whichever is fastest (usually plain dot product) and nothing changes.
+  </p>
+
+  <h2>Every pair at once: the similarity matrix</h2>
+
+  <p>
+    Real systems rarely compare just one pair. Embed 5 sentences, and you can compute all
+    5×5 cosines at once — a <strong>similarity matrix</strong>, where cell (i, j) holds
+    cos(sentence i, sentence j). The diagonal is all 1.0 (everything matches itself).
+    Hold onto this picture: in Module 5, attention builds exactly this kind of
+    every-token-versus-every-token score grid, and in Module 9, MiniLM's training loss is
+    computed over exactly this kind of batch matrix. The similarity matrix is one of the
+    three or four pictures this whole field runs on.
+  </p>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      "Semantic search", "vector similarity", "nearest neighbors", "relevance score" —
+      across Pinecone, pgvector, FAISS, Chroma, Qdrant, it is all this one formula.
+      When your RAG retrieval returns a chunk with <code>score: 0.83</code>, you now know
+      the exact arithmetic that produced that number: multiply 384 pairs, add, divide by
+      lengths. The mystique of your entire retrieval layer is one line of math.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: a vector search engine in 15 lines</div>
+<pre><code>import numpy as np
+from sentence_transformers import SentenceTransformer, util
+
+docs = [
+    "Steps to reset your password",
+    "Update your billing address",
+    "How to delete your account",
+    "Change your notification settings",
+    "Best pasta in Bengaluru",
+]
+model = SentenceTransformer("all-MiniLM-L6-v2")
+D = model.encode(docs, normalize_embeddings=True)      # (5, 384)
+q = model.encode(["I forgot my password"], normalize_embeddings=True)[0]
+
+scores = D @ q            # 5 dot products at once = cosine (unit vectors!)
+for i in np.argsort(-scores):
+    print(f"{scores[i]:.3f}  {docs[i]}")
+
+# sanity-check against the library's own implementation:
+print(util.cos_sim(q, D))
+</code></pre>
+    <p>
+      The line <code>scores = D @ q</code> <em>is</em> a vector database's core loop —
+      everything else (indexes, HNSW, sharding) is about doing this faster at scale,
+      which we cover in M12. Try adding your own documents and watch the ranking respond.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Dot product = multiply-and-add = <strong>agreement score</strong>. Cosine = dot product
+    with lengths removed = <strong>direction agreement</strong>. One number, computed
+    between vectors, is how every system you use decides what's similar — and in Module 5
+    you'll watch a transformer use the very same number to decide which words should pay
+    attention to which.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Explain cosine similarity to a non-ML engineer in two sentences.</summary>
+      <div><p>Every text becomes an arrow in space, pointed according to its meaning. Cosine similarity measures the angle between two arrows: same direction ≈ 1 means same meaning, unrelated directions ≈ 0, opposite ≈ −1.</p></div>
+    </details>
+    <details>
+      <summary>When do dot product and cosine similarity give the same ranking? Why does it matter?</summary>
+      <div><p>When vectors are normalized to unit length — then a·b = cos(a,b) exactly, and Euclidean distance also produces the same neighbor ranking. It matters because most embedding models (including all-MiniLM with <code>normalize_embeddings=True</code>) output unit vectors, letting vector DBs use the cheapest metric without changing results. If vectors are <em>not</em> normalized, dot product favors longer vectors and the rankings can differ.</p></div>
+    </details>
+    <details>
+      <summary>Why might raw dot product be a bad relevance score for unnormalized embeddings?</summary>
+      <div><p>Because it conflates magnitude with agreement: a vector with big values scores high against everything, regardless of direction. A long, generic document could outrank a short, precisely relevant one. Normalizing (cosine) removes the length effect and compares pure direction.</p></div>
+    </details>
+    <details>
+      <summary>Is a cosine similarity of 0.75 "good"?</summary>
+      <div><p>Meaningless without context: score distributions are model-specific (and even domain-specific). 0.75 is near-paraphrase territory for all-MiniLM but might be common noise for another model. The right approach is empirical: look at the score distribution on your own data, or better, evaluate retrieval with labeled pairs (recall@k — M9) rather than trusting absolute score values.</p></div>
+    </details>
+    <details>
+      <summary>What's the computational cost of cosine similarity between two d-dimensional vectors, and of searching n documents?</summary>
+      <div><p>One pair: O(d) — d multiplies and adds. Brute-force search: O(n·d) per query. At n=1M, d=384 that's ~400M multiply-adds — a few tens of milliseconds on modern hardware, which is why brute force is fine up to a surprisingly large n; approximate indexes like HNSW (M12) exist for when it isn't.</p></div>
+    </details>
+    <details>
+      <summary>Two sentences with no words in common — can they still score high cosine similarity?</summary>
+      <div><p>Yes, and that's the whole point of embeddings: "The CEO stepped down" and "The chief executive resigned" share almost no tokens but land close in embedding space because the model learned meaning, not word overlap. TF-IDF/BoW would score them near zero — this is precisely the failure that pushed the field from counting to embeddings (M2).</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

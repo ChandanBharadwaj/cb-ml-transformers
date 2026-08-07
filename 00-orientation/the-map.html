@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Map: What You Know, What's Missing — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="00-orientation/the-map">
+<main id="content">
+
+  <h1>The Map: What You Know, What's Missing</h1>
+
+  <p>
+    You've built a RAG system. You've shipped chatbots on top of LLMs. You call
+    <code>all-MiniLM</code> to embed text, GLiNER to pull out entities, and you work
+    alongside agentic tools every day. And years ago you learned bag-of-words, TF-IDF,
+    word frequencies, word2vec.
+  </p>
+  <p>
+    So here's the strange situation: <strong>you can build with these systems, but you
+    can't see inside them.</strong> You know <em>that</em> MiniLM turns a sentence into
+    384 numbers — not <em>how</em>, not <em>why 384</em>, not what would make it better or
+    worse at your task. That's the missing middle, and this course exists to fill it.
+  </p>
+
+  <h2>Your stack, drawn honestly</h2>
+
+  <p>
+    Let's draw the RAG chatbot you've already built — but honestly, marking what's
+    actually a black box to you right now. Press play (or step through with the buttons /
+    slider — this is also your tour of how every animation in this course works).
+  </p>
+
+  <figure class="anim" id="fig-map">
+    <div class="fig-title">Animation · Your RAG pipeline, x-rayed</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-map-t">
+      <title id="fig-map-t">The learner's RAG pipeline with black boxes cracking open into course modules</title>
+
+      <!-- pipeline row -->
+      <g id="stp-question">
+        <rect x="10" y="40" width="110" height="46" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="65" y="59" text-anchor="middle" font-size="14" class="sv-ink">"How do I</text>
+        <text x="65" y="76" text-anchor="middle" font-size="14" class="sv-ink">reset my pwd?"</text>
+      </g>
+
+      <g id="stp-arrow1" class="sp-hide">
+        <line x1="122" y1="63" x2="152" y2="63" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#map-arr)"/>
+      </g>
+
+      <g id="stp-minilm" class="sp-hide">
+        <rect id="minilm-box" x="156" y="30" width="120" height="66" rx="10" fill="#1e293b"/>
+        <text x="216" y="57" text-anchor="middle" font-size="15" fill="#ffffff" font-weight="700">all-MiniLM</text>
+        <text id="minilm-lock" x="216" y="80" text-anchor="middle" font-size="15" fill="#fbbf24">black box 🔒</text>
+      </g>
+
+      <g id="stp-arrow2" class="sp-hide">
+        <line x1="280" y1="63" x2="310" y2="63" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#map-arr)"/>
+      </g>
+
+      <g id="stp-vector" class="sp-hide">
+        <rect x="314" y="40" width="104" height="46" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="366" y="59" text-anchor="middle" font-size="12.5" class="mono" fill="#1d4ed8">[0.02, −0.41,</text>
+        <text x="366" y="75" text-anchor="middle" font-size="12.5" class="mono" fill="#1d4ed8">… 384 nums]</text>
+      </g>
+
+      <g id="stp-arrow3" class="sp-hide">
+        <line x1="422" y1="63" x2="452" y2="63" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#map-arr)"/>
+      </g>
+
+      <g id="stp-vdb" class="sp-hide">
+        <rect x="456" y="30" width="106" height="66" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="509" y="55" text-anchor="middle" font-size="14" class="sv-ink" font-weight="700">Vector DB</text>
+        <text id="vdb-sub" x="509" y="78" text-anchor="middle" font-size="12" fill="#64748b">"similarity"…?</text>
+      </g>
+
+      <!-- second row: LLM -->
+      <g id="stp-arrow4" class="sp-hide">
+        <path d="M 509 100 C 509 140, 380 130, 340 158" fill="none" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#map-arr)"/>
+        <text x="470" y="140" font-size="12" fill="#64748b">top chunks + question</text>
+      </g>
+
+      <g id="stp-llm" class="sp-hide">
+        <rect id="llm-box" x="220" y="160" width="130" height="66" rx="10" fill="#1e293b"/>
+        <text x="285" y="187" text-anchor="middle" font-size="15" fill="#ffffff" font-weight="700">LLM API</text>
+        <text id="llm-lock" x="285" y="210" text-anchor="middle" font-size="15" fill="#fbbf24">black box 🔒</text>
+      </g>
+
+      <g id="stp-arrow5" class="sp-hide">
+        <line x1="214" y1="193" x2="184" y2="193" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#map-arr)"/>
+      </g>
+
+      <g id="stp-answer" class="sp-hide">
+        <rect x="60" y="170" width="120" height="46" rx="10" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="120" y="189" text-anchor="middle" font-size="14" fill="#065f46">"Click Settings</text>
+        <text x="120" y="206" text-anchor="middle" font-size="14" fill="#065f46">→ Reset…"</text>
+      </g>
+
+      <!-- cracked-open panels -->
+      <g id="stp-crack1" class="sp-hide">
+        <path d="M 216 100 L 216 262" stroke="#f59e0b" stroke-width="2" stroke-dasharray="5 4"/>
+        <rect x="20" y="266" width="290" height="64" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="165" y="286" text-anchor="middle" font-size="13" fill="#92400e" font-weight="700">Inside MiniLM:</text>
+        <text x="165" y="304" text-anchor="middle" font-size="12.5" fill="#92400e">tokens → embeddings → 6 attention blocks</text>
+        <text x="165" y="321" text-anchor="middle" font-size="12.5" fill="#92400e">→ pooling  (M1–M5 explain it, M9 how it's trained)</text>
+      </g>
+
+      <g id="stp-crack2" class="sp-hide">
+        <path d="M 340 226 L 400 262" stroke="#f59e0b" stroke-width="2" stroke-dasharray="5 4"/>
+        <rect x="330" y="266" width="292" height="64" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="476" y="286" text-anchor="middle" font-size="13" fill="#92400e" font-weight="700">Inside the LLM:</text>
+        <text x="476" y="304" text-anchor="middle" font-size="12.5" fill="#92400e">a decoder transformer predicting one token at a time</text>
+        <text x="476" y="321" text-anchor="middle" font-size="12.5" fill="#92400e">(M5), tuned to chat (M8), sampled (M11)</text>
+      </g>
+
+      <g id="stp-goal" class="sp-hide">
+        <rect x="20" y="348" width="602" height="52" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="321" y="370" text-anchor="middle" font-size="14" fill="#1d4ed8" font-weight="700">Goal of this course: redraw this exact diagram</text>
+        <text x="321" y="390" text-anchor="middle" font-size="14" fill="#1d4ed8">with zero black boxes — every arrow explained.</text>
+      </g>
+
+      <defs>
+        <marker id="map-arr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L8,4.5 L0,9 z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-map-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-map svg",
+        caption: "#fig-map-cap",
+        steps: [
+          { caption: "A user asks your chatbot a question. So far, everything is familiar.",
+            show: [] },
+          { caption: "The question goes into <b>all-MiniLM</b>. You know what comes out — but what happens inside is a black box today.",
+            show: ["#stp-arrow1", "#stp-minilm"] },
+          { caption: "Out comes an <b>embedding</b>: 384 numbers. Why 384? Why these values? By Module 9 you'll know exactly.",
+            show: ["#stp-arrow2", "#stp-vector"] },
+          { caption: "Your vector DB finds 'similar' chunks. What is similarity, mathematically? That's Module 1 — and it's one formula.",
+            show: ["#stp-arrow3", "#stp-vdb"] },
+          { caption: "Top chunks + question get stuffed into a prompt and sent to the <b>LLM</b> — black box number two.",
+            show: ["#stp-arrow4", "#stp-llm"] },
+          { caption: "An answer streams back, token by token. (Why token by token? Module 5 will make that obvious.)",
+            show: ["#stp-arrow5", "#stp-answer"] },
+          { caption: "Crack open MiniLM: it's tokens → embeddings → six identical attention blocks → pooling. Small enough to fully understand.",
+            show: ["#stp-crack1"], hide: ["#minilm-lock"], holdMs: 3400 },
+          { caption: "Crack open the LLM: the <b>same architecture</b>, bigger, run in a loop, tuned to behave like an assistant.",
+            show: ["#stp-crack2"], hide: ["#llm-lock"], holdMs: 3400 },
+          { caption: "That's the deal: by the end, this diagram has no locks left.",
+            show: ["#stp-goal"] }
+        ]
+      });
+    });
+  </script>
+
+  <div class="keypoint callout">
+    <div class="co-head">The one big realization</div>
+    <p>
+      MiniLM and the LLM behind your chatbot are <strong>not different kinds of things</strong>.
+      They are the same invention — the transformer — at different sizes, trained with
+      different objectives. Understand the transformer once and both boxes open with the
+      same key. That's why this course has one core (Module 5) and everything else either
+      leads to it or applies it.
+    </p>
+  </div>
+
+  <h2>What you already know (both ends)</h2>
+
+  <p><strong>The classical end.</strong> Bag-of-words and TF-IDF turn text into vectors of
+  counts. You already know their weakness: <em>"good"</em> and <em>"great"</em> are as
+  unrelated to each other as <em>"good"</em> and <em>"carburetor"</em> — counting can't see
+  meaning. word2vec was the first fix you met, even if only conceptually. This end gave you
+  the right instinct: <strong>text becomes vectors, and vectors get compared.</strong></p>
+
+  <p><strong>The application end.</strong> RAG, chatbots, embeddings-as-a-service, GLiNER,
+  agent tools. This end gave you the other right instinct:
+  <strong>these systems are assembled from callable parts.</strong></p>
+
+  <p>What's missing is the part that explains both: how a pile of numbers learns to
+  understand language. Concretely, the middle is:</p>
+
+  <ul>
+    <li>How a model <strong>learns</strong> anything at all (loss, gradients, backprop — M1, M3)</li>
+    <li>How word vectors are actually <strong>trained</strong>, not just used (M2)</li>
+    <li>How <strong>attention</strong> lets a model read in context (M4, M5)</li>
+    <li>The <strong>transformer</strong> itself, piece by piece, with real numbers (M5)</li>
+    <li>How models are <strong>pretrained, fine-tuned, aligned</strong> (M6, M8)</li>
+    <li>What all this costs in <strong>compute and memory</strong>, and why (M7)</li>
+    <li>How your exact tools — <strong>all-MiniLM (M9)</strong> and <strong>GLiNER (M10)</strong> — were built</li>
+    <li>How LLMs are <strong>sampled, cached, quantized, benchmarked</strong> (M11)</li>
+    <li>Your own stack — RAG, reranking, evals, agents — <strong>rebuilt from scratch</strong> (M12)</li>
+  </ul>
+
+  <h2>How the course is ordered, and why</h2>
+
+  <p>
+    Strictly bottom-up: every page uses only ideas from earlier pages, and almost every
+    page plants a seed some later page harvests. Two examples you'll watch grow: the
+    "pull together / push apart" trick you'll meet in word2vec's negative sampling (M2)
+    is <em>exactly</em> how all-MiniLM was fine-tuned (M9), just at sentence scale.
+    And the dot product you'll meet on the second page of M1 is the single operation
+    at the heart of attention, of your vector DB, and of GLiNER's zero-shot trick.
+  </p>
+  <p>
+    There's no schedule and no time estimates — go as deep as each page deserves. Your
+    progress is saved in the browser (checkmarks in the menu, a "continue" button on the
+    home page).
+  </p>
+
+  <h2>How to use the animations</h2>
+  <p>
+    Every concept gets a step-through animation like the one above:
+    <strong>▶</strong> plays it like a slideshow, <strong>⏮ / ⏭</strong> step one beat at a
+    time, and the <strong>slider scrubs</strong> to any step instantly — going backward is
+    always safe. On a phone you can also <strong>swipe</strong> left/right on the picture.
+    The caption under the picture is the narration; read it on every step, it carries
+    real content.
+  </p>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Boxes like this one appear on every page. They tie the concept you just learned to
+      something you've already built or used — the moment where a new idea snaps onto your
+      existing experience is where it actually sticks.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build</div>
+    <p>
+      Green boxes give you something small and real to build — usually a few lines of
+      Python. They're optional but they're where understanding becomes skill. The course
+      ends with you building a working agent on top of a from-scratch RAG pipeline, using
+      an embedding model you understand down to the individual attention head.
+    </p>
+  </div>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Amber boxes contain real numbers from real systems — actual model sizes, actual
+      similarity scores, actual GPU memory math. Example, to set the scale of things:
+      all-MiniLM-L6-v2 has <strong>~22.7 million parameters</strong>; the original BERT has
+      <strong>110 million</strong>; Llama-3-8B has <strong>8 billion</strong>; frontier
+      LLMs are in the <strong>hundreds of billions to trillions</strong>. Same blueprint,
+      five orders of magnitude apart — you'll learn what those extra parameters buy.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Your two black boxes are the <strong>same machine</strong>. Everything in this course
+    is either (a) the math that machine runs on, (b) the machine itself, or (c) how the
+    machine is trained, tuned, measured and served. Keep this page's diagram in your head —
+    every module lights up another part of it.
+  </p>
+
+  <div class="interview">
+    <h2>Interview warm-up</h2>
+    <p>Every page ends with interview questions. These ones are the kind that open a screening call — make sure you can answer them out loud, not just nod along.</p>
+    <details>
+      <summary>What's the difference between TF-IDF vectors and embedding vectors like MiniLM's?</summary>
+      <div><p>TF-IDF vectors are <strong>sparse counts</strong>: one dimension per vocabulary word, values from term frequency × inverse document frequency, no notion of meaning — two synonyms share no signal. Embeddings are <strong>dense, learned</strong> vectors (e.g. 384 dimensions) trained so that semantically similar text lands close together. TF-IDF measures word overlap; embeddings measure meaning overlap. (You'll be able to explain <em>how</em> that training works after M2 and M9.)</p></div>
+    </details>
+    <details>
+      <summary>Your RAG system returns bad chunks. Name the two most likely stages to investigate.</summary>
+      <div><p>(1) <strong>Retrieval</strong>: the embedding model doesn't rank truly relevant chunks near the query — wrong model for the domain, or chunks poorly cut. (2) <strong>Chunking</strong>: chunks too big (diluted embeddings) or too small (context split apart). The course gives you the tools to measure which one is failing (recall@k, M9/M12) instead of guessing.</p></div>
+    </details>
+    <details>
+      <summary>Is the model behind ChatGPT-style assistants fundamentally different from an embedding model like MiniLM?</summary>
+      <div><p>No — both are transformers. MiniLM is a small <strong>encoder</strong> trained to produce one representative vector per text; chat LLMs are large <strong>decoders</strong> trained to predict the next token, then tuned to follow instructions. Same core mechanism (self-attention), different size, objective and head.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

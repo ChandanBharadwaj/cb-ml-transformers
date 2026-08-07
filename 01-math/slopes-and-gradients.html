@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Slopes, Gradients &amp; Learning — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="01-math/slopes-and-gradients">
+<main id="content">
+
+  <h1>Slopes, Gradients &amp; Learning</h1>
+
+  <p>
+    Three pages ago, vectors. Then dot products, then matrices. One piece of math remains
+    before neural networks make sense: <strong>how a pile of matrices can learn</strong>.
+    The answer is a single idea — <em>roll downhill</em> — and if you've ever nudged a
+    shower tap toward the right temperature, you already have the intuition.
+  </p>
+
+  <h2>Loss: a single number for "how wrong"</h2>
+
+  <p>
+    To improve anything, you must measure it. In ML the measure is the
+    <strong>loss</strong>: one number scoring how badly the model did on some examples.
+    Big loss = very wrong; near zero = nailed it. (Cross-entropy, the loss LLMs train on,
+    arrives in M3 — for now any "wrongness score" will do.)
+  </p>
+  <p>
+    Now the key mental picture of all of deep learning. The model's parameters are knobs.
+    Every possible knob setting produces some loss. Imagine loss as
+    <strong>altitude</strong> over the landscape of all possible settings:
+    somewhere in that landscape is a valley where loss is low.
+    <strong>Training is hiking downhill in fog</strong> — you can't see the valley,
+    but you can always feel which way the ground tilts under your feet.
+  </p>
+
+  <h2>The slope tells you which way is down</h2>
+
+  <p>
+    With one knob <code>w</code>, the loss is a curve. The <strong>slope</strong>
+    (derivative) at your current position says: if I nudge <code>w</code> up a little,
+    does loss go up or down, and how fast? Slope positive → loss rises to the right →
+    step <em>left</em>. Slope negative → step <em>right</em>. Always move opposite the
+    slope:
+  </p>
+
+  <div class="formula">
+    <div class="math">w ← w − η · (slope at w)</div>
+    <div class="plain">
+      <b>In plain words:</b> new knob = old knob, minus a step in the uphill direction —
+      i.e. a step <b>downhill</b>. η ("eta") is the <b>learning rate</b>: how big each
+      step is. This one line, repeated millions of times, is how every model you've
+      ever used was trained. All of it.
+    </div>
+  </div>
+
+  <figure class="anim" id="fig-ball">
+    <div class="fig-title">Animation · Gradient descent on one knob</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-ball-t">
+      <title id="fig-ball-t">A ball stepping down a loss curve using slopes</title>
+      <!-- loss curve: valley near x=400 -->
+      <path d="M 60 70 C 180 90, 240 210, 330 268 C 390 305, 430 305, 470 280 C 520 248, 560 190, 600 120"
+            fill="none" stroke="#94a3b8" stroke-width="3.5"/>
+      <text x="70" y="46" font-size="14" fill="#64748b">loss (how wrong)</text>
+      <text x="560" y="360" font-size="14" fill="#64748b">knob w →</text>
+
+      <!-- ball positions along the curve -->
+      <g id="ball0"><circle cx="130" cy="98" r="11" class="sv-a"/></g>
+      <g id="slope0" class="sp-hide">
+        <line x1="70" y1="66" x2="200" y2="140" stroke="#d97706" stroke-width="3" stroke-dasharray="6 4"/>
+        <text x="208" y="130" font-size="13.5" fill="#b45309" font-weight="650">steep slope → big step</text>
+      </g>
+      <g id="ball1" class="sp-hide"><circle cx="265" cy="215" r="11" class="sv-a"/></g>
+      <g id="slope1" class="sp-hide">
+        <line x1="205" y1="165" x2="325" y2="258" stroke="#d97706" stroke-width="3" stroke-dasharray="6 4"/>
+      </g>
+      <g id="ball2" class="sp-hide"><circle cx="355" cy="285" r="11" class="sv-a"/></g>
+      <g id="slope2" class="sp-hide">
+        <line x1="300" y1="260" x2="410" y2="304" stroke="#d97706" stroke-width="3" stroke-dasharray="6 4"/>
+        <text x="418" y="330" font-size="13.5" fill="#b45309" font-weight="650">gentler slope → smaller step</text>
+      </g>
+      <g id="ball3" class="sp-hide"><circle cx="418" cy="300" r="11" class="sv-a"/></g>
+      <g id="flat" class="sp-hide">
+        <line x1="368" y1="300" x2="468" y2="300" stroke="#059669" stroke-width="3"/>
+        <text x="418" y="345" text-anchor="middle" font-size="14" fill="#047857" font-weight="650">slope ≈ 0: valley found, training done</text>
+      </g>
+      <g id="trail" class="sp-hide">
+        <path d="M 130 98 C 200 150, 240 190, 265 215 C 310 255, 335 275, 355 285 C 380 295, 400 300, 418 300"
+              fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="3 5" opacity="0.6"/>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-ball-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-ball svg",
+        caption: "#fig-ball-cap",
+        steps: [
+          { caption: "The loss curve for one knob. Somewhere down there is the best setting — but the model can't see the curve, only feel the local tilt." },
+          { caption: "Measure the slope where we stand. It's steep — so take a <b>big</b> step downhill.", show: ["#slope0"] },
+          { caption: "New position, new slope. Still descending.", show: ["#ball1", "#slope1"], hide: ["#slope0", "#ball0"] },
+          { caption: "The ground is flattening — steps naturally shrink as slope shrinks.", show: ["#ball2", "#slope2"], hide: ["#ball1", "#slope1"] },
+          { caption: "Slope ≈ 0: nothing tilts anymore. We've reached a valley — a knob setting where the model is (locally) as right as it can be.", show: ["#ball3", "#flat"], hide: ["#ball2", "#slope2"] },
+          { caption: "The whole journey: measure tilt, step downhill, repeat. That loop <b>is</b> training. Everything else is bookkeeping.", show: ["#trail"], holdMs: 3400 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Gradient: the slope when there are millions of knobs</h2>
+
+  <p>
+    Real models don't have one knob — MiniLM has 22.7 million, LLMs have billions. The
+    <strong>gradient</strong> is simply the slope measured for <em>every knob at once</em>:
+    a vector (see how M1 loops back?) with one entry per parameter, each entry saying
+    "nudging this particular knob up changes loss this much." Step every knob a little
+    against its own slope entry, all simultaneously, and the whole model moves downhill:
+  </p>
+
+  <div class="formula">
+    <div class="math">w ← w − η ∇L(w)</div>
+    <div class="plain">
+      <b>In plain words:</b> identical to the one-knob rule, applied to all knobs in
+      parallel. ∇L ("gradient of the loss") is the vector of every knob's slope.
+      Where does that giant slope-vector come from? That's <b>backpropagation</b>,
+      and it gets its own page in M3.
+    </div>
+  </div>
+
+  <h2>Learning rate: the step size that makes or breaks training</h2>
+
+  <p>
+    η is the most consequential number you'll ever put in a training config. Too small,
+    and training crawls — thousands of tiny steps, barely moving. Too big, and each step
+    overshoots the valley floor, bouncing across it, sometimes climbing <em>out</em> and
+    exploding. Watch both failure modes:
+  </p>
+
+  <figure class="anim" id="fig-lr">
+    <div class="fig-title">Animation · Learning rate: too small, too big, just right</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-lr-t">
+      <title id="fig-lr-t">Effect of learning rate on descent into a valley, shown on a contour map</title>
+      <!-- contour rings -->
+      <g id="rings">
+        <ellipse cx="320" cy="190" rx="270" ry="150" fill="none" stroke="#e2e8f0" stroke-width="2"/>
+        <ellipse cx="320" cy="190" rx="200" ry="110" fill="none" stroke="#dbe4ee" stroke-width="2"/>
+        <ellipse cx="320" cy="190" rx="130" ry="72" fill="none" stroke="#cbd5e1" stroke-width="2"/>
+        <ellipse cx="320" cy="190" rx="66" ry="36" fill="none" stroke="#94a3b8" stroke-width="2"/>
+        <circle cx="320" cy="190" r="7" fill="#059669"/>
+        <text x="320" y="172" text-anchor="middle" font-size="13" fill="#047857" font-weight="650">minimum</text>
+        <text x="86" y="52" font-size="13" fill="#94a3b8">bird's-eye view: each ring = one altitude</text>
+      </g>
+
+      <!-- too small: crawling dots from left -->
+      <g id="small" class="sp-hide">
+        <circle cx="80" cy="240" r="6" class="sv-a"/><circle cx="102" cy="236" r="6" class="sv-a"/>
+        <circle cx="124" cy="232" r="6" class="sv-a"/><circle cx="146" cy="228" r="6" class="sv-a"/>
+        <circle cx="168" cy="225" r="6" class="sv-a"/><circle cx="188" cy="222" r="6" class="sv-a"/>
+        <text x="88" y="278" font-size="13.5" fill="#1d4ed8" font-weight="650">η too small: crawling…</text>
+      </g>
+
+      <!-- too big: bouncing across -->
+      <g id="big" class="sp-hide">
+        <path d="M 540 90 L 180 300 L 520 260 L 210 110 L 500 210" fill="none" stroke="#dc2626" stroke-width="2.5" marker-end="url(#lr-r)"/>
+        <circle cx="540" cy="90" r="6" fill="#dc2626"/>
+        <text x="440" y="330" font-size="13.5" fill="#dc2626" font-weight="650">η too big: overshooting every time</text>
+      </g>
+
+      <!-- just right -->
+      <g id="right" class="sp-hide">
+        <path d="M 90 110 L 210 150 L 285 172 L 312 184 L 320 190" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#lr-g)"/>
+        <circle cx="90" cy="110" r="6" fill="#059669"/>
+        <text x="88" y="94" font-size="13.5" fill="#047857" font-weight="650">η right: fast, then settling</text>
+      </g>
+      <defs>
+        <marker id="lr-r" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#dc2626"/></marker>
+        <marker id="lr-g" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#059669"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-lr-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-lr svg",
+        caption: "#fig-lr-cap",
+        steps: [
+          { caption: "The loss landscape from above — a contour map. Every training run is a walk on this map toward the green minimum." },
+          { caption: "<b>η too small:</b> steps so tiny that after six updates we've barely moved. Training would take forever (and cost a fortune in GPU hours).", show: ["#small"] },
+          { caption: "<b>η too big:</b> every step overshoots the valley and lands on the far slope. The loss zig-zags or blows up — the classic 'my loss is NaN' disaster.", show: ["#big"] },
+          { caption: "<b>η right:</b> confident early steps, settling gently into the minimum. In practice you'll also <i>schedule</i> η — start bigger, shrink over time (M3).", show: ["#right"], hide: ["#small", "#big"], holdMs: 3600 }
+        ]
+      });
+    });
+  </script>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Typical learning rates, to calibrate your instincts: fine-tuning BERT-class models:
+      <strong>2e-5</strong> (that's 0.00002). Pretraining GPT-class models:
+      <strong>~6e-4</strong> with warmup and decay. Your numpy exercise below:
+      <strong>0.01–0.1</strong> works. Why so tiny for big models? Millions of knobs move
+      <em>at once</em> — each tiny nudge compounds across the whole network, so small
+      individual steps produce large collective movement.
+    </p>
+  </div>
+
+  <h2>The only calculus you need: slopes chain</h2>
+
+  <p>
+    You might worry a wall of derivative rules is coming. It isn't. The course needs
+    exactly one fact from calculus, and it's this: <strong>if a change flows through
+    several stages, the slopes of the stages multiply.</strong> If doubling the oven's
+    dial adds 30° of heat, and every 10° of heat browns the cake 2 shades, then the dial's
+    effect on browning = 3 × 2 = 6 shades per notch. That's the
+    <strong>chain rule</strong>, the entire engine behind backpropagation (M3), where the
+    "stages" are a network's layers. If you followed the cake, you already know it.
+  </p>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Every Hugging Face training script you've scrolled past has a
+      <code>learning_rate=2e-5</code> line — that's η, the step size on this page's
+      landscape. "The loss didn't converge" = the ball never settled in a valley.
+      "Training diverged" = the red bouncing animation. And when M9 shows you how
+      all-MiniLM was fine-tuned with a contrastive loss, the <em>mechanism</em> doing the
+      learning is precisely this page: measure tilt, step downhill, millions of times,
+      over a billion sentence pairs.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: gradient descent with your own hands</div>
+    <p>Fit a line y = wx + b to five points — the "hello world" of training. No libraries, no magic:</p>
+<pre><code>import numpy as np
+
+x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+y = np.array([2.1, 4.1, 6.2, 8.0, 9.9])   # roughly y = 2x
+
+w, b = 0.0, 0.0        # start ignorant
+lr = 0.02               # η — the knob to play with
+
+for step in range(200):
+    pred = w * x + b
+    err = pred - y
+    loss = (err ** 2).mean()          # mean squared error
+    grad_w = 2 * (err * x).mean()     # slope of loss w.r.t. w
+    grad_b = 2 * err.mean()           # slope of loss w.r.t. b
+    w -= lr * grad_w                  # the update rule, verbatim
+    b -= lr * grad_b
+    if step % 40 == 0:
+        print(f"step {step:3d}  loss {loss:8.4f}  w {w:5.3f}  b {b:5.3f}")
+
+print(f"final: y ≈ {w:.2f}x + {b:.2f}")   # should be close to y = 2x
+</code></pre>
+    <p>
+      Watch the loss column collapse. Then break it on purpose: set <code>lr = 1.0</code>
+      and watch the loss explode to infinity (the red animation, live) — then
+      <code>lr = 0.0001</code> and watch it crawl. You will never again read a learning
+      rate without knowing exactly what it does. This 20-line loop is, structurally, the
+      same loop that trained GPT-4 — just with more knobs and better bookkeeping.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Training = <strong>loss</strong> (a wrongness score) + <strong>gradient</strong>
+    (every knob's slope, all at once) + <strong>update rule</strong>
+    (<code>w ← w − η∇L</code>, repeated). The landscape picture — a ball feeling its way
+    downhill in fog — is not a metaphor you'll outgrow; it's the working mental model
+    researchers actually use.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Explain gradient descent without math.</summary>
+      <div><p>The model's settings define a landscape where altitude = error. Training starts somewhere random, feels which way the ground slopes, and takes a small step downhill — repeated until it settles in a valley. The gradient is the "which way is down" measurement; the learning rate is the step size.</p></div>
+    </details>
+    <details>
+      <summary>What happens with a learning rate that's too high? Too low? How would you detect each from the loss curve?</summary>
+      <div><p>Too high: steps overshoot the minimum — the loss oscillates, plateaus at a bad value, or explodes to NaN. Too low: loss decreases but agonizingly slowly, and may stall in shallow regions. Detection: plot loss vs steps — divergence/zig-zag means lower η; a smooth but glacial slide means raise it. A common recipe is warmup then decay (M3.5).</p></div>
+    </details>
+    <details>
+      <summary>What exactly is the gradient of the loss, dimensionally?</summary>
+      <div><p>A vector with one entry per trainable parameter — same shape as the parameters themselves. Entry i is ∂L/∂wᵢ: how much loss changes per unit nudge of parameter i. For a 7B model, the gradient is itself 7B numbers, which is why gradients dominate training memory (M7).</p></div>
+    </details>
+    <details>
+      <summary>Does gradient descent find the best possible parameters?</summary>
+      <div><p>No guarantee — it finds a <em>local</em> minimum (or more precisely, in high dimensions, it settles in low-loss regions; true isolated local minima are rarer than saddle points). In practice this is fine: the loss landscapes of large networks have vast families of good-enough valleys, and noise from mini-batches (M3) helps escape bad spots. "Global optimum" is neither achieved nor needed.</p></div>
+    </details>
+    <details>
+      <summary>State the chain rule intuitively and say why it matters for deep learning.</summary>
+      <div><p>When an effect passes through stages, the sensitivities multiply: if A affects B by factor 3 and B affects C by factor 2, A affects C by factor 6. Deep networks are long chains of stages (layers), and backpropagation is just the chain rule applied systematically from the loss backward through every layer to get every parameter's slope in one pass (M3.4).</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

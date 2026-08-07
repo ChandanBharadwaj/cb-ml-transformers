@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Missing Middle — Transformers, from the ends you know to the core you don't</title>
+  <meta name="description" content="A visual, animated, mobile-first course that bridges classical NLP and the LLM application layer: neural nets, attention, transformers, fine-tuning, compute and evaluation.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+<main id="content">
+
+  <div class="hero">
+    <div class="kicker">A visual course for one specific engineer</div>
+    <h1>The Missing Middle</h1>
+    <p class="lead">
+      You know the two ends: bag-of-words, TF-IDF and word2vec on one side —
+      RAG systems, chatbots, all-MiniLM, GLiNER and agentic tools on the other.
+      This course is the middle you're missing: how neural networks, attention and
+      transformers actually work, how models are trained, tuned, measured and served —
+      until nothing in your stack is a black box.
+    </p>
+    <div id="continue-slot"><a class="continue-btn" href="00-orientation/the-map.html">Start &#8594; The Map</a></div>
+    <p class="lead" style="font-size:0.9rem;">
+      Every concept comes with a step-through animation (▶ play, or step with ⏮ ⏭ and the slider),
+      the math intuition in plain words, real numbers from real models, a
+      "connect the dots" back to things you've built, something to build yourself,
+      and interview questions. Read in order — every page builds on the last.
+    </p>
+  </div>
+
+  <hr>
+
+  <div class="module-card">
+    <div class="mod-num">M0 · ORIENTATION</div>
+    <h3><a href="00-orientation/the-map.html">The Map</a></h3>
+    <p class="mod-desc">Your own stack drawn as a pipeline — and exactly where the black boxes are. <span class="mod-progress" data-mod-progress="00-orientation"></span></p>
+    <p class="mod-pages"><a href="00-orientation/the-map.html">The Map: What You Know, What's Missing</a></p>
+  </div>
+
+  <div class="module-card">
+    <div class="mod-num">M1 · FOUNDATIONS</div>
+    <h3><a href="01-math/vectors-are-meaning.html">The Math You Actually Need</a></h3>
+    <p class="mod-desc">Vectors, dot products, matrices and gradients — the four ideas everything else is built from. No symbol-pushing. <span class="mod-progress" data-mod-progress="01-math"></span></p>
+    <p class="mod-pages">
+      <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a> ·
+      <a href="01-math/dot-product-similarity.html">Dot Product = Similarity</a> ·
+      <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a> ·
+      <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a>
+    </p>
+  </div>
+
+  <div class="module-card coming">
+    <div class="mod-num">M2 · EMBEDDINGS <span class="soon-tag">coming soon</span></div>
+    <h3>Word Embeddings, For Real This Time</h3>
+    <p class="mod-desc">One-hot's failure, word2vec's actual mechanism, negative sampling, and why static embeddings hit a wall.</p>
+  </div>
+
+  <div class="module-card coming">
+    <div class="mod-num">M3 · NEURAL NETS <span class="soon-tag">coming soon</span></div>
+    <h3>Neural Network Fundamentals</h3>
+    <p class="mod-desc">Neurons, softmax, cross-entropy, the training loop, backprop, optimizers, and how to measure any model. Ends with you building a classifier.</p>
+  </div>
+
+  <div class="module-card coming">
+    <div class="mod-num">M4 · SEQUENCES <span class="soon-tag">coming soon</span></div>
+    <h3>Sequences &amp; the Road to Attention</h3>
+    <p class="mod-desc">Language modeling, why RNNs failed, the seq2seq bottleneck, and the moment attention was born.</p>
+  </div>
+
+  <div class="module-card coming">
+    <div class="mod-num">M5 · THE CORE <span class="soon-tag">coming soon</span></div>
+    <h3>The Transformer, Piece by Piece</h3>
+    <p class="mod-desc">Tokenization, positional encoding, self-attention with real numbers, multi-head, residuals, encoder vs decoder. The heart of the course.</p>
+  </div>
+
+  <div class="module-card coming">
+    <div class="mod-num">M6 · MODEL FAMILIES <span class="soon-tag">coming soon</span></div>
+    <h3>Model Families &amp; Pretraining</h3>
+    <p class="mod-desc">BERT, GPT, T5 — what each is for, how each is pretrained, and how to read any model card.</p>
+  </div>
+
+  <div class="module-card coming">
+    <div class="mod-num">M7 · COMPUTE <span class="soon-tag">coming soon</span></div>
+    <h3>Compute, Hardware &amp; Scale</h3>
+    <p class="mod-desc">GPUs, memory math, training at scale, scaling laws, and why inference costs what it costs.</p>
+  </div>
+
+  <div class="module-card coming">
+    <div class="mod-num">M8 · FINE-TUNING <span class="soon-tag">coming soon</span></div>
+    <h3>Fine-tuning &amp; Adaptation in Depth</h3>
+    <p class="mod-desc">Transfer learning, the fine-tune recipe, SFT, RLHF/DPO, LoRA &amp; QLoRA, and when to fine-tune vs RAG vs prompt.</p>
+  </div>
+
+  <div class="module-card coming">
+    <div class="mod-num">M9 · LOOP-CLOSER #1 <span class="soon-tag">coming soon</span></div>
+    <h3>How all-MiniLM Is Actually Made</h3>
+    <p class="mod-desc">Pooling, siamese networks, contrastive training, distillation — every property of the embedding model you use, derived. Ends with you fine-tuning it on your own data.</p>
+  </div>
+
+  <div class="module-card coming">
+    <div class="mod-num">M10 · LOOP-CLOSER #2 <span class="soon-tag">coming soon</span></div>
+    <h3>NER Internals: Demystifying GLiNER</h3>
+    <p class="mod-desc">Classic NER, then GLiNER's trick: entity recognition as similarity search — the same move as your RAG.</p>
+  </div>
+
+  <div class="module-card coming">
+    <div class="mod-num">M11 · LLM ERA <span class="soon-tag">coming soon</span></div>
+    <h3>The LLM Era</h3>
+    <p class="mod-desc">Temperature and top-p, context windows and the KV cache, quantization, benchmarks, reasoning models, safety and prompt injection.</p>
+  </div>
+
+  <div class="module-card coming">
+    <div class="mod-num">M12 · YOUR STACK <span class="soon-tag">coming soon</span></div>
+    <h3>Demystifying Your Own Stack</h3>
+    <p class="mod-desc">RAG internals, reranking, RAG evaluation, tool calling and agents — your own projects, x-rayed. Capstone: a from-scratch agent over a from-scratch RAG.</p>
+  </div>
+
+  <hr>
+  <p style="font-size:0.85rem;color:var(--muted);">
+    Also: <a href="glossary.html">Glossary</a> (grows with each module).
+    Your reading progress is saved in this browser.
+  </p>
+
+</main>
+<script src="assets/js/manifest.js"></script>
+<script src="assets/js/site.js"></script>
+</body>
+</html>

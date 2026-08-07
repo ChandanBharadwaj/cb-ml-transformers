@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Matrices Transform Meaning — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="01-math/matrices-transform">
+<main id="content">
+
+  <h1>Matrices Transform Meaning</h1>
+
+  <p>
+    Last page, a dot product compared two vectors. This page: a <strong>matrix</strong>
+    is a machine made of dot products — it takes a vector in and produces a transformed
+    vector out. Why care? Because <strong>a neural network layer is a matrix</strong>.
+    When someone says "MiniLM has 22 million parameters", they mean: the numbers filling
+    its matrices. When a model is "trained", those matrix entries are what change.
+    You are one page away from knowing what a parameter physically is.
+  </p>
+
+  <h2>Matrix × vector: every output is a weighted mix</h2>
+
+  <p>
+    A matrix is a grid of numbers. Multiply matrix <code>W</code> by a vector
+    <code>x</code>, and each entry of the output is <strong>one row of W dot-producted
+    with x</strong>. That's the whole rule — the operation from last page, repeated once
+    per row.
+  </p>
+
+  <div class="formula">
+    <div class="math">y = W x &nbsp;&nbsp;→&nbsp;&nbsp; yᵢ = (row i of W) · x</div>
+    <div class="plain">
+      <b>In plain words:</b> each output slot is a <b>weighted mix</b> of all input slots,
+      and row i of the matrix holds the mixing weights for output slot i. A matrix is a
+      recipe book: one recipe (row) per output ingredient.
+    </div>
+  </div>
+
+  <figure class="anim" id="fig-mv">
+    <div class="fig-title">Animation · Matrix × vector = rows of dot products</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-mv-t">
+      <title id="fig-mv-t">Each output entry equals one matrix row dot the input vector</title>
+
+      <!-- matrix W 2x3 -->
+      <text x="94" y="60" font-size="15" class="sv-ink" font-weight="700">W (2×3)</text>
+      <g id="row1">
+        <rect x="40" y="80" width="52" height="40" rx="7" fill="#dbeafe" stroke="#93c5fd"/><text x="66" y="106" text-anchor="middle" font-size="15" class="mono" fill="#1d4ed8">1</text>
+        <rect x="98" y="80" width="52" height="40" rx="7" fill="#dbeafe" stroke="#93c5fd"/><text x="124" y="106" text-anchor="middle" font-size="15" class="mono" fill="#1d4ed8">0</text>
+        <rect x="156" y="80" width="52" height="40" rx="7" fill="#dbeafe" stroke="#93c5fd"/><text x="182" y="106" text-anchor="middle" font-size="15" class="mono" fill="#1d4ed8">2</text>
+      </g>
+      <g id="row2">
+        <rect x="40" y="128" width="52" height="40" rx="7" fill="#dbeafe" stroke="#93c5fd"/><text x="66" y="154" text-anchor="middle" font-size="15" class="mono" fill="#1d4ed8">−1</text>
+        <rect x="98" y="128" width="52" height="40" rx="7" fill="#dbeafe" stroke="#93c5fd"/><text x="124" y="154" text-anchor="middle" font-size="15" class="mono" fill="#1d4ed8">3</text>
+        <rect x="156" y="128" width="52" height="40" rx="7" fill="#dbeafe" stroke="#93c5fd"/><text x="182" y="154" text-anchor="middle" font-size="15" class="mono" fill="#1d4ed8">1</text>
+      </g>
+
+      <!-- vector x 3 -->
+      <text x="310" y="60" font-size="15" class="sv-ink" font-weight="700">x (3)</text>
+      <g id="vx">
+        <rect x="284" y="80" width="52" height="40" rx="7" fill="#fef3c7" stroke="#fcd34d"/><text x="310" y="106" text-anchor="middle" font-size="15" class="mono" fill="#b45309">2</text>
+        <rect x="284" y="128" width="52" height="40" rx="7" fill="#fef3c7" stroke="#fcd34d"/><text x="310" y="154" text-anchor="middle" font-size="15" class="mono" fill="#b45309">1</text>
+        <rect x="284" y="176" width="52" height="40" rx="7" fill="#fef3c7" stroke="#fcd34d"/><text x="310" y="202" text-anchor="middle" font-size="15" class="mono" fill="#b45309">1</text>
+      </g>
+
+      <!-- output y -->
+      <text x="540" y="60" font-size="15" class="sv-ink" font-weight="700">y = Wx (2)</text>
+      <g id="y1" class="sp-hide">
+        <rect x="514" y="80" width="90" height="40" rx="7" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="559" y="106" text-anchor="middle" font-size="15" class="mono" fill="#047857">4</text>
+      </g>
+      <g id="y2" class="sp-hide">
+        <rect x="514" y="128" width="90" height="40" rx="7" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="559" y="154" text-anchor="middle" font-size="15" class="mono" fill="#047857">2</text>
+      </g>
+
+      <!-- working lines -->
+      <g id="work1" class="sp-hide">
+        <rect x="40" y="252" width="560" height="42" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="279" text-anchor="middle" font-size="15" class="mono sv-ink">y₁ = row1 · x = 1×2 + 0×1 + 2×1 = 4</text>
+      </g>
+      <g id="work2" class="sp-hide">
+        <rect x="40" y="300" width="560" height="42" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="327" text-anchor="middle" font-size="15" class="mono sv-ink">y₂ = row2 · x = −1×2 + 3×1 + 1×1 = 2</text>
+      </g>
+      <g id="hl-note" class="sp-hide">
+        <text x="320" y="238" text-anchor="middle" font-size="14.5" fill="#64748b">3 numbers in → 2 numbers out: the matrix changed the vector's dimension</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-mv-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-mv svg",
+        caption: "#fig-mv-cap",
+        steps: [
+          { caption: "A 2×3 matrix <b>W</b> and a 3-slot vector <b>x</b>. We'll produce a 2-slot output." },
+          { caption: "Output slot 1 = <b>row 1 dot x</b> — the operation you learned last page.", show: ["#work1"], addClass: { "#row1 rect": "sv-hl" } },
+          { caption: "…which comes to <b>4</b>.", show: ["#y1"] },
+          { caption: "Output slot 2 = <b>row 2 dot x</b>.", show: ["#work2"], removeClass: { "#row1 rect": "sv-hl" }, addClass: { "#row2 rect": "sv-hl" } },
+          { caption: "…which comes to <b>2</b>. Done: y = [4, 2].", show: ["#y2"], removeClass: { "#row2 rect": "sv-hl" } },
+          { caption: "Notice: 3 in, 2 out. Matrices re-mix <b>and</b> can resize vectors — that's how a model reshapes information layer by layer.", show: ["#hl-note"], holdMs: 3400 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>A matrix is a transformation of space</h2>
+
+  <p>
+    Rows-of-dot-products is the <em>mechanical</em> view. The <em>geometric</em> view:
+    a matrix moves every point in space at once — rotating, stretching, squashing,
+    shearing. Feed in all the points of a shape and the matrix transforms the whole shape
+    in one consistent way. This is the view that explains what layers <em>do</em>:
+    each layer of a network warps meaning-space, step by step, until things that should be
+    treated the same end up near each other.
+  </p>
+
+  <figure class="anim" id="fig-warp">
+    <div class="fig-title">Animation · One matrix warps all of space</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-warp-t">
+      <title id="fig-warp-t">A grid of points transformed by a matrix</title>
+      <rect x="20" y="20" width="600" height="320" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+
+      <!-- original grid: square of dots -->
+      <g id="grid-before">
+        <circle cx="230" cy="120" r="6" class="sv-a"/><circle cx="290" cy="120" r="6" class="sv-a"/><circle cx="350" cy="120" r="6" class="sv-a"/>
+        <circle cx="230" cy="180" r="6" class="sv-a"/><circle cx="290" cy="180" r="6" class="sv-a"/><circle cx="350" cy="180" r="6" class="sv-a"/>
+        <circle cx="230" cy="240" r="6" class="sv-a"/><circle cx="290" cy="240" r="6" class="sv-a"/><circle cx="350" cy="240" r="6" class="sv-a"/>
+        <path d="M 230 120 L 350 120 L 350 240 L 230 240 Z" fill="none" stroke="#93c5fd" stroke-width="2"/>
+      </g>
+
+      <!-- sheared grid -->
+      <g id="grid-after" class="sp-hide">
+        <circle cx="290" cy="105" r="6" class="sv-b"/><circle cx="350" cy="90" r="6" class="sv-b"/><circle cx="410" cy="75" r="6" class="sv-b"/>
+        <circle cx="320" cy="180" r="6" class="sv-b"/><circle cx="380" cy="165" r="6" class="sv-b"/><circle cx="440" cy="150" r="6" class="sv-b"/>
+        <circle cx="350" cy="255" r="6" class="sv-b"/><circle cx="410" cy="240" r="6" class="sv-b"/><circle cx="470" cy="225" r="6" class="sv-b"/>
+        <path d="M 290 105 L 410 75 L 470 225 L 350 255 Z" fill="none" stroke="#fcd34d" stroke-width="2"/>
+      </g>
+      <g id="lbl-w" class="sp-hide">
+        <rect x="40" y="40" width="180" height="40" rx="9" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="130" y="66" text-anchor="middle" font-size="15" class="mono" fill="#1d4ed8">same W, every point</text>
+      </g>
+      <g id="lbl-learn" class="sp-hide">
+        <rect x="330" y="292" width="272" height="40" rx="9" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="466" y="318" text-anchor="middle" font-size="13.5" fill="#92400e">training = adjusting W's numbers = reshaping the warp</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-warp-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-warp svg",
+        caption: "#fig-warp-cap",
+        steps: [
+          { caption: "Nine points in a neat square — think of them as nine meanings in embedding space." },
+          { caption: "Multiply <b>every</b> point by the same matrix: the whole space shears and stretches together, consistently.", show: ["#grid-after", "#lbl-w"] },
+          { caption: "The old square is still visible in the new shape — transformed, not scrambled. Matrices preserve structure (lines stay lines).", },
+          { caption: "Now the punchline: <b>training a model means tuning the entries of its matrices</b> — reshaping these warps so useful structure emerges at the output.", show: ["#lbl-learn"], hide: ["#grid-before"], holdMs: 3600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Matrix × matrix: a batch of vectors at once</h2>
+
+  <p>
+    Stack several vectors as the rows of a matrix <code>X</code> (one row per sentence,
+    say), and <code>X·Wᵀ</code> transforms <em>all of them in one shot</em>. That's not a
+    new operation — just many matrix-vector products laid side by side. But it's the
+    reason GPUs exist in this field: one big matrix-matrix multiply is vastly faster than
+    thousands of little ones done one at a time. "Batching" (M7) is exactly this trick.
+  </p>
+
+  <h2>Shape discipline: the one skill to drill</h2>
+
+  <p>
+    Matrix multiplication <code>(n×d) · (d×k) → (n×k)</code> only works when the
+    <strong>inner dimensions match</strong> — the d's touch and cancel. This sounds like
+    pedantry; it is actually the #1 practical skill for reading any model code, because
+    every layer, every attention head, every LoRA adapter is documented by its shapes.
+  </p>
+
+  <figure class="anim" id="fig-shapes">
+    <div class="fig-title">Animation · Follow the shapes</div>
+    <svg viewBox="0 0 640 300" aria-labelledby="fig-shapes-t">
+      <title id="fig-shapes-t">Shape flow through a matrix multiply</title>
+      <g id="shape-x">
+        <rect x="40" y="90" width="140" height="90" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="110" y="128" text-anchor="middle" font-size="16" fill="#1d4ed8" font-weight="700">X</text>
+        <text x="110" y="152" text-anchor="middle" font-size="14" class="mono" fill="#1d4ed8">(32 × 384)</text>
+        <text x="110" y="205" text-anchor="middle" font-size="12.5" fill="#64748b">32 sentences,</text>
+        <text x="110" y="221" text-anchor="middle" font-size="12.5" fill="#64748b">384-D each</text>
+      </g>
+      <text x="205" y="142" font-size="20" class="sv-ink">·</text>
+      <g id="shape-w">
+        <rect x="230" y="90" width="140" height="90" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="300" y="128" text-anchor="middle" font-size="16" fill="#b45309" font-weight="700">W</text>
+        <text x="300" y="152" text-anchor="middle" font-size="14" class="mono" fill="#b45309">(384 × 1536)</text>
+        <text x="300" y="205" text-anchor="middle" font-size="12.5" fill="#64748b">the layer's</text>
+        <text x="300" y="221" text-anchor="middle" font-size="12.5" fill="#64748b">learned weights</text>
+      </g>
+      <g id="match" class="sp-hide">
+        <ellipse cx="167" cy="152" rx="36" ry="16" fill="none" stroke="#059669" stroke-width="2.5"/>
+        <ellipse cx="273" cy="152" rx="36" ry="16" fill="none" stroke="#059669" stroke-width="2.5"/>
+        <path d="M 167 170 C 180 195, 258 195, 273 170" fill="none" stroke="#059669" stroke-width="2.5" stroke-dasharray="5 4"/>
+        <text x="220" y="248" text-anchor="middle" font-size="14" fill="#047857" font-weight="650">inner 384s must match — they cancel</text>
+      </g>
+      <g id="shape-y" class="sp-hide">
+        <text x="395" y="142" font-size="20" class="sv-ink">=</text>
+        <rect x="420" y="90" width="150" height="90" rx="10" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="495" y="128" text-anchor="middle" font-size="16" fill="#047857" font-weight="700">Y</text>
+        <text x="495" y="152" text-anchor="middle" font-size="14" class="mono" fill="#047857">(32 × 1536)</text>
+        <text x="495" y="205" text-anchor="middle" font-size="12.5" fill="#64748b">outer dims survive:</text>
+        <text x="495" y="221" text-anchor="middle" font-size="12.5" fill="#64748b">32 and 1536</text>
+      </g>
+      <g id="lbl-rule" class="sp-hide">
+        <rect x="90" y="24" width="460" height="38" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="49" text-anchor="middle" font-size="15" class="mono sv-ink">(n×d) · (d×k) → (n×k)   — inner match, outer survive</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-shapes-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-shapes svg",
+        caption: "#fig-shapes-cap",
+        steps: [
+          { caption: "A batch of 32 sentence embeddings meets a layer's weight matrix. Can they multiply?" },
+          { caption: "Check the <b>inner</b> dimensions: 384 and 384. They match, so yes — and they cancel out.", show: ["#match"] },
+          { caption: "The <b>outer</b> dimensions survive: result is (32 × 1536). Every sentence just got re-mixed into a richer 1536-D representation.", show: ["#shape-y"] },
+          { caption: "That's the entire rule. Read any model's code by following shapes like this, layer to layer.", show: ["#lbl-rule"], holdMs: 3200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>So what is a "parameter"?</h2>
+
+  <p>
+    Now you can answer precisely: <strong>a parameter is one number inside one of the
+    model's matrices</strong> (or bias vectors — M3). A "layer" is (mostly) a matrix
+    waiting to transform whatever vector arrives. A "22M-parameter model" is a specific
+    stack of matrices whose entries were tuned by training. Nothing more exotic than that.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers: counting MiniLM's parameters</div>
+    <p>
+      One attention projection matrix inside all-MiniLM-L6-v2 is 384×384 =
+      <strong>147,456 parameters</strong>. Each of its 6 blocks has four of those
+      (Q, K, V, output — M5) plus two FFN matrices of 384×1536 and 1536×384
+      (<strong>589,824</strong> each). Blocks alone: ≈ 10.6M parameters. Add the token
+      embedding table (30,522 words × 384 ≈ <strong>11.7M</strong> — yes, the dictionary
+      is half the model!) and you land near the advertised <strong>22.7M</strong>.
+      You'll do this bookkeeping yourself for BERT in M5 — it's oddly satisfying.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      You've written <code>df.values @ weights</code> in pandas/numpy without ceremony —
+      that <code>@</code> is this page. And when you download a model from Hugging Face,
+      the multi-GB <code>model.safetensors</code> file contains literally nothing but
+      these matrices, serialized. Model file = matrices. Forward pass = your data flowing
+      through them, being dot-producted and warped, layer by layer.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Worksheet (no code): shape-check yourself</div>
+    <p>Which of these multiply, and what's the output shape? Answers below the questions — decide first.</p>
+    <p>
+      1) <code>(8×384) · (384×384)</code> &nbsp;
+      2) <code>(384×8) · (384×8)</code> &nbsp;
+      3) <code>(1×384) · (384×30522)</code> &nbsp;
+      4) <code>(64×128) · (128×64) · (64×10)</code>
+    </p>
+    <details><summary>Answers</summary>
+      <div><p>
+        1) ✓ → (8×384). &nbsp;
+        2) ✗ — inner dims are 8 and 384; transpose the first to (8×384) and it works. &nbsp;
+        3) ✓ → (1×30522) — this exact multiply is how a language model scores every word in its vocabulary at once (M4). &nbsp;
+        4) ✓ → (64×64) then (64×10) — a two-layer network's skeleton.
+      </p></div>
+    </details>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    A matrix is rows of dot products — equivalently, a warp applied to all of space.
+    Models are stacks of matrices; parameters are their entries; training tunes them.
+    And shapes must chain: <code>(n×d)·(d×k)→(n×k)</code>. With that, model architecture
+    diagrams stop being decoration and become readable.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>What is a parameter in a neural network, concretely?</summary>
+      <div><p>A single learned number — an entry in a weight matrix (or bias vector). A "7B model" contains seven billion such numbers organized into the matrices of its layers. Training adjusts their values; inference just multiplies data through them.</p></div>
+    </details>
+    <details>
+      <summary>Why is matrix multiplication the dominant operation in deep learning?</summary>
+      <div><p>Because a layer's job — "make each output a learned weighted mix of all inputs" — is exactly what matrix multiplication computes, and because it batches: one (batch×d)·(d×k) multiply processes the whole batch in a single, highly parallel operation that GPUs are built to accelerate. Transformers are ~99% matrix multiplies by compute.</p></div>
+    </details>
+    <details>
+      <summary>A layer maps 384-D vectors to 1536-D. What's its weight matrix shape and parameter count?</summary>
+      <div><p>Shape 384×1536 (or transposed, by convention) = 589,824 weights, plus 1536 bias terms ≈ 591k parameters. This is the actual expansion layer in each MiniLM block. Being able to do this arithmetic instantly is how you sanity-check model sizes and memory needs (M7).</p></div>
+    </details>
+    <details>
+      <summary>Why can't two matrices multiply if the inner dimensions differ?</summary>
+      <div><p>Each output entry is a dot product between a row of the first and a column of the second — dot products need equal-length vectors. Mismatched inner dimensions mean those rows and columns don't pair up, so the operation is undefined. (In practice: shape errors are the most common bug in model code, and reading them well is a superpower.)</p></div>
+    </details>
+    <details>
+      <summary>Is a stack of two matrix multiplications more expressive than one?</summary>
+      <div><p>Not by itself — W₂(W₁x) = (W₂W₁)x collapses into a single matrix. Depth only adds power when a <em>nonlinearity</em> sits between the matrices (M3's "bend"). This is exactly why activation functions exist, and it's a classic interview question.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>
