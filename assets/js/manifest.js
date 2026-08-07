@@ -31,7 +31,6 @@ window.SITE_MANIFEST = {
       slug: "02-embeddings",
       num: "M2",
       title: "Word Embeddings, For Real This Time",
-      coming: true,
       pages: [
         { slug: "one-hot-and-why-it-fails", title: "One-Hot & Why It Fails" },
         { slug: "word2vec-skip-gram", title: "word2vec: Skip-Gram Internals" },
@@ -43,7 +42,6 @@ window.SITE_MANIFEST = {
       slug: "03-neural-nets",
       num: "M3",
       title: "Neural Network Fundamentals",
-      coming: true,
       pages: [
         { slug: "the-neuron", title: "The Neuron" },
         { slug: "softmax-and-cross-entropy", title: "Softmax & Cross-Entropy" },

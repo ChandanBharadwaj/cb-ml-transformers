@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Softmax &amp; Cross-Entropy — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="03-neural-nets/softmax-and-cross-entropy">
+<main id="content">
+
+  <h1>Softmax &amp; Cross-Entropy</h1>
+
+  <p>
+    This page explains two formulas that run your daily life. Softmax converts raw
+    scores into probabilities — it fires <strong>every time an LLM picks its next token</strong>,
+    and the <code>temperature</code> parameter in your API calls is a dial <em>inside</em>
+    it. Cross-entropy is the loss those models trained on — the single number that GPT-4
+    spent its $100M compute budget pushing down. After this page, neither is folklore.
+  </p>
+
+  <h2>Softmax: scores → probabilities</h2>
+
+  <p>
+    A model's last layer outputs one <strong>logit</strong> (raw score, last page's word)
+    per option — per class, or per token in the vocabulary. Logits can be any numbers:
+    3.2, −1.7, 0.4. To act on them we need probabilities: non-negative, summing to 1.
+    Softmax does it in two moves: <strong>exponentiate</strong> each logit (making
+    everything positive and amplifying gaps), then <strong>normalize</strong> by the sum.
+  </p>
+
+  <div class="formula">
+    <div class="math">P(i) = e<sup>zᵢ</sup> / Σⱼ e<sup>zⱼ</sup></div>
+    <div class="plain">
+      <b>In plain words:</b> raise e to each score, divide each result by the total.
+      Bigger score → disproportionately bigger share. The Σ in the denominator is the
+      "compare against everyone" that negative sampling (M2.3) dodged during training —
+      here, at inference over classes or one vocabulary, it's affordable.
+    </div>
+  </div>
+
+  <figure class="anim" id="fig-soft">
+    <div class="fig-title">Animation · Softmax and the temperature dial</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-s-t">
+      <title id="fig-s-t">Logits converted to probabilities, then reshaped by temperature</title>
+      <text x="30" y="44" font-size="18" class="sv-ink" font-weight="700">next word after: "The capital of France is ___"</text>
+      <!-- bars: base positions y=bottom 330 -->
+      <g class="mono">
+        <text x="110" y="356" text-anchor="middle" font-size="18" class="sv-ink">Paris</text>
+        <text x="250" y="356" text-anchor="middle" font-size="18" class="sv-ink">Lyon</text>
+        <text x="390" y="356" text-anchor="middle" font-size="18" class="sv-ink">nice</text>
+        <text x="530" y="356" text-anchor="middle" font-size="18" class="sv-ink">banana</text>
+      </g>
+      <!-- logits row -->
+      <g id="logits" class="mono">
+        <text x="110" y="384" text-anchor="middle" font-size="17" fill="#64748b">z=7.1</text>
+        <text x="250" y="384" text-anchor="middle" font-size="17" fill="#64748b">z=3.9</text>
+        <text x="390" y="384" text-anchor="middle" font-size="17" fill="#64748b">z=2.8</text>
+        <text x="530" y="384" text-anchor="middle" font-size="17" fill="#64748b">z=−1.0</text>
+      </g>
+      <!-- probability bars (T=1) -->
+      <g id="bars">
+        <rect id="bar1" x="70" y="93"  width="80" height="237" rx="8" fill="#2563eb"/>
+        <rect id="bar2" x="210" y="308" width="80" height="22" rx="8" fill="#60a5fa"/>
+        <rect id="bar3" x="350" y="323" width="80" height="7" rx="4" fill="#93c5fd"/>
+        <rect id="bar4" x="470" y="329" width="80" height="1" rx="1" fill="#bfdbfe"/>
+      </g>
+      <g id="probs" class="mono">
+        <text id="p1" x="110" y="82" text-anchor="middle" font-size="18" fill="#1d4ed8" font-weight="700">0.95</text>
+        <text id="p2" x="250" y="298" text-anchor="middle" font-size="18" fill="#1d4ed8">0.04</text>
+        <text id="p3" x="390" y="313" text-anchor="middle" font-size="18" fill="#1d4ed8">0.01</text>
+        <text id="p4" x="530" y="319" text-anchor="middle" font-size="18" fill="#1d4ed8">0.00</text>
+      </g>
+      <g id="temp-lbl">
+        <rect x="440" y="30" width="180" height="40" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text id="temp-txt" x="530" y="57" text-anchor="middle" font-size="18" class="mono sv-ink">T = 1.0</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-s-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-soft svg",
+        caption: "#fig-s-cap",
+        steps: [
+          { caption: "Four candidate words, four logits from the model. Softmax at T=1 turns them into these probabilities — Paris dominates because exponentials amplify score gaps." },
+          { caption: "<b>Temperature divides the logits before softmax: softmax(z/T).</b> Cool it to T=0.3 — gaps get magnified, the distribution sharpens toward certainty. At T→0, it's pure argmax: always Paris.",
+            attrs: { "#bar1": { y: 74, height: 256 }, "#bar2": { y: 327, height: 3 }, "#bar3": { y: 329.5, height: 0.8 }, "#bar4": { y: 330, height: 0.3 },
+                     "#p1": { textContent: "0.99", y: 63 }, "#p2": { textContent: "0.01", y: 317 }, "#p3": { textContent: "0.00" }, "#p4": { textContent: "0.00" },
+                     "#temp-txt": { textContent: "T = 0.3" } }, holdMs: 5600 },
+          { caption: "Heat it to T=2.0 — gaps shrink, probability spreads to the tail. Even 'banana' gets a real chance. High temperature = adventurous, occasionally nonsensical output.",
+            attrs: { "#bar1": { y: 190, height: 140 }, "#bar2": { y: 260, height: 70 }, "#bar3": { y: 285, height: 45 }, "#bar4": { y: 312, height: 18 },
+                     "#p1": { textContent: "0.56", y: 180 }, "#p2": { textContent: "0.23", y: 250 }, "#p3": { textContent: "0.15", y: 275 }, "#p4": { textContent: "0.06", y: 302 },
+                     "#temp-txt": { textContent: "T = 2.0" } }, holdMs: 5600 },
+          { caption: "That's the entire mechanism behind your API's temperature parameter: one division inside softmax. temperature=0 → deterministic; 0.7 → balanced; 1.5+ → creative chaos. (Full sampling story: top-p, top-k — M11.1.)",
+            attrs: { "#bar1": { y: 93, height: 237 }, "#bar2": { y: 308, height: 22 }, "#bar3": { y: 323, height: 7 }, "#bar4": { y: 329, height: 1 },
+                     "#p1": { textContent: "0.95", y: 82 }, "#p2": { textContent: "0.04", y: 298 }, "#p3": { textContent: "0.01", y: 313 }, "#p4": { textContent: "0.00", y: 319 },
+                     "#temp-txt": { textContent: "T = 1.0" } }, holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <p>
+    Why exponentials, specifically? Three properties earn softmax its job: it makes
+    everything positive; it's <strong>winner-amplifying</strong> (a logit gap of 3
+    becomes a probability ratio of e³ ≈ 20×, so confident scores translate to confident
+    probabilities); and it's smooth — differentiable everywhere, so gradients flow
+    through it (which a hard argmax "pick the max" could never allow; you can't take a
+    slope of a cliff). It's the differentiable version of choosing.
+  </p>
+
+  <h2>Cross-entropy: the loss that trained everything you use</h2>
+
+  <p>
+    Softmax gives the model's belief. Training needs a wrongness score (M1.4's loss)
+    comparing belief to truth. Cross-entropy is brutally simple: look up
+    <strong>the probability the model gave to the correct answer</strong>, and take
+    −log of it. Everything else is ignored.
+  </p>
+
+  <div class="formula">
+    <div class="math">loss = −log P(correct answer)</div>
+    <div class="plain">
+      <b>In plain words:</b> a surprise meter. Gave the truth P=0.95? loss = 0.05 —
+      barely surprised. P=0.5? loss = 0.69. P=0.01? loss = 4.6 — shocked, huge gradient,
+      big weight updates. As P→0 the loss →∞: total confidence in the wrong thing is
+      punished without limit.
+    </div>
+  </div>
+
+  <figure class="anim" id="fig-ce">
+    <div class="fig-title">Animation · The surprise meter</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-ce-t">
+      <title id="fig-ce-t">Cross-entropy loss rising steeply as the probability of the truth falls</title>
+      <!-- axes -->
+      <line x1="70" y1="300" x2="600" y2="300" stroke="#cbd5e1" stroke-width="2.5"/>
+      <line x1="70" y1="40" x2="70" y2="300" stroke="#cbd5e1" stroke-width="2.5"/>
+      <text x="335" y="336" text-anchor="middle" font-size="17" fill="#64748b">P(correct answer) →</text>
+      <text x="46" y="170" text-anchor="middle" font-size="17" fill="#64748b" transform="rotate(-90 46 170)">loss</text>
+      <text x="600" y="322" font-size="17" fill="#94a3b8">1.0</text>
+      <text x="70" y="322" text-anchor="middle" font-size="17" fill="#94a3b8">0</text>
+      <!-- -log curve from x=600 (P=1, loss 0) rising to left -->
+      <path d="M 600 300 C 430 292, 300 275, 220 240 C 160 210, 115 140, 92 50"
+            fill="none" stroke="#2563eb" stroke-width="4"/>
+      <!-- markers -->
+      <g id="m1" class="sp-hide">
+        <circle cx="560" cy="297" r="9" class="sv-c"/>
+        <text x="558" y="272" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">P=0.9 → loss 0.1</text>
+      </g>
+      <g id="m2" class="sp-hide">
+        <circle cx="335" cy="262" r="9" fill="#d97706"/>
+        <text x="342" y="237" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">P=0.5 → loss 0.69</text>
+      </g>
+      <g id="m3" class="sp-hide">
+        <circle cx="100" cy="70" r="9" fill="#dc2626"/>
+        <text x="235" y="66" text-anchor="middle" font-size="17" fill="#dc2626" font-weight="700">P=0.02 → loss 3.9 !!</text>
+      </g>
+      <g id="lbl-grad" class="sp-hide">
+        <rect x="240" y="100" width="360" height="56" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="420" y="124" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">steep curve = big gradient = big correction</text>
+        <text x="420" y="148" text-anchor="middle" font-size="17" fill="#1d4ed8">the most-wrong predictions teach the most</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-ce-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-ce svg",
+        caption: "#fig-ce-cap",
+        steps: [
+          { caption: "The −log curve: loss vs the probability given to the truth. Read it right-to-left as things go wrong." },
+          { caption: "Model right and confident: tiny loss, tiny nudge. Nothing to learn here.", show: ["#m1"] },
+          { caption: "Model unsure: moderate loss (0.69 = −log 0.5, a number you'll see constantly — it's the loss of a coin flip).", show: ["#m2"] },
+          { caption: "Model confidently wrong: the curve goes vertical. Loss 3.9, giant gradient.", show: ["#m3"] },
+          { caption: "This asymmetry IS the pedagogy of deep learning: errors teach in proportion to how confidently wrong the model was.", show: ["#lbl-grad"], holdMs: 5400 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Why not just use accuracy as the loss?</h2>
+
+  <p>
+    Accuracy is what you <em>care about</em>, so why train on cross-entropy? Because
+    accuracy is a staircase: nudge a weight slightly and accuracy either doesn't move or
+    jumps a whole step — its slope is 0 almost everywhere, and M1.4's ball can't roll on
+    a staircase. Cross-entropy is a smooth ramp measuring <em>how confidently</em> right
+    or wrong you are, so every weight nudge changes it a little, and gradients always
+    have a direction to follow. General principle worth memorizing:
+    <strong>train on smooth surrogates, evaluate on the metric you care about</strong>
+    (that metric page is 3.6).
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      LLM training loss <em>is</em> cross-entropy over the vocabulary, averaged per token
+      — when papers report "loss 2.0", that means the model gives the true next token
+      e<sup>−2.0</sup> ≈ 13.5% probability on average (equivalently: perplexity ≈ 7.4,
+      "hesitating between ~7 words" — formalized in M4.1). Llama-3's pretraining ended
+      around loss ≈ 1.9 on its data mix; random guessing over a 128k vocabulary would be
+      loss = ln(128,000) ≈ 11.8. The entire $100M+ run: moving one number from ~11.8
+      to ~1.9.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Three sightings in your own stack. (1) <code>temperature=0.7</code> in your chatbot
+      config: dividing logits inside this page's softmax, nothing more. (2) The σ in
+      M2.3's negative sampling: softmax's 2-option special case (sigmoid). (3) "logprobs"
+      in API responses: the log of these very probabilities. And one forward pointer:
+      when your LLM streams a response, <em>every single token</em> was chosen by
+      running this page's math over ~100k vocabulary entries — softmax at the scale
+      negative sampling avoided, paid at inference time instead (why that's affordable:
+      M7.5).
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: softmax, temperature and CE in 12 lines</div>
+<pre><code>import numpy as np
+
+def softmax(z, T=1.0):
+    z = np.array(z, dtype=float) / T
+    z -= z.max()                  # numerical-stability trick (standard practice)
+    e = np.exp(z)
+    return e / e.sum()
+
+logits = [7.1, 3.9, 2.8, -1.0]    # Paris, Lyon, nice, banana
+for T in [0.3, 1.0, 2.0]:
+    print(f"T={T}:", softmax(logits, T).round(3))
+
+truth = 0                          # Paris is correct
+for T in [0.3, 1.0, 2.0]:
+    p = softmax(logits, T)[truth]
+    print(f"T={T}: P(truth)={p:.3f}  CE loss={-np.log(p):.3f}")
+</code></pre>
+    <p>
+      Reproduce the animation exactly, then break things: set a logit to 50 and see why
+      the <code>z -= z.max()</code> line exists (remove it → overflow → NaN — the
+      real-world bug it prevents). You've now implemented the two formulas that trained
+      and steer every model you use.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Softmax = exponentiate-and-normalize, turning logits into probabilities;
+    temperature is a divisor inside it that sharpens (T&lt;1) or flattens (T&gt;1) the
+    result. Cross-entropy = −log P(truth): a surprise meter whose steep left wall makes
+    confidently-wrong predictions the loudest teachers. Every modern language model is
+    these two formulas plus a very large amount of M1.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Walk through what softmax does and why exponentiation is used.</summary>
+      <div><p>Softmax exponentiates each logit and normalizes by the sum, producing a valid probability distribution. Exponentiation: guarantees positivity, amplifies differences (logit gap Δ → probability ratio e^Δ, so clear winners get decisive mass), and keeps the whole map smooth/differentiable so it can sit inside gradient-based training — unlike a hard argmax.</p></div>
+    </details>
+    <details>
+      <summary>Explain temperature mathematically and behaviorally.</summary>
+      <div><p>softmax(z/T). T&lt;1 scales logits up → sharper distribution → conservative, repetitive, deterministic-leaning output (T→0 = argmax). T&gt;1 scales logits down → flatter distribution → diverse, creative, riskier output. It reshapes existing beliefs; it never adds knowledge. Practical defaults: ~0 for extraction/structured output, ~0.7 for chat, 1.0+ for brainstorming.</p></div>
+    </details>
+    <details>
+      <summary>Why is cross-entropy preferred over accuracy or squared error for classification?</summary>
+      <div><p>Accuracy has zero gradient almost everywhere (a step function of the weights) — unusable for gradient descent. Squared error on probabilities is smooth but its gradients shrink exactly when the model is confidently wrong (paired with sigmoid/softmax it saturates), learning slowest when it should learn fastest. Cross-entropy's −log P blows up for confident errors, delivering large gradients precisely there; with softmax it also yields the elegant gradient (p − y), simple and well-scaled.</p></div>
+    </details>
+    <details>
+      <summary>Your training loss is exactly ln(number of classes) at step 0. What does that tell you?</summary>
+      <div><p>The model is outputting a uniform distribution — P(truth) = 1/C so loss = ln C. That's the expected starting loss with random init, and it's a standard sanity check: for 10 classes expect ~2.30, for a 50k vocab ~10.8. Starting far above it suggests broken initialization or preprocessing; never dropping below it means nothing is being learned (e.g., shuffled labels, LR too high).</p></div>
+    </details>
+    <details>
+      <summary>Connect LLM "loss" numbers to something interpretable.</summary>
+      <div><p>LLM loss is mean per-token cross-entropy: loss L means the true next token gets e^(−L) average probability, and perplexity = e^L is "the effective number of tokens the model hesitates between." Loss 2.0 → ~13.5% on the truth, perplexity ~7.4. This converts leaderboard numbers into intuition and is exactly the M4.1 material interviewers probe with "what does a lower loss actually mean?"</p></div>
+    </details>
+    <details>
+      <summary>Does temperature=0 make an LLM deterministic and correct?</summary>
+      <div><p>Deterministic-ish (greedy argmax per step; some nondeterminism can remain from floating-point/batching effects in serving) — but not more <em>correct</em>: it just always picks the modal token. If the model's beliefs are wrong, T=0 confidently commits to the same wrong answer every time. Temperature trades variance, not truthfulness — a distinction interviewers use to separate users from engineers.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

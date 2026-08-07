@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Backpropagation, Intuitively — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="03-neural-nets/backprop-intuition">
+<main id="content">
+
+  <h1>Backpropagation, Intuitively</h1>
+
+  <p>
+    The training loop's beat ③ said "compute every parameter's blame" and moved on.
+    This page opens that box. Backprop has a reputation as the scary math of deep
+    learning; in truth it is <strong>one idea (M1.4's chain rule) plus disciplined
+    bookkeeping</strong>. We'll do it with arrows and actual numbers — no symbol walls —
+    and by the end you'll know exactly what <code>loss.backward()</code> does for a
+    living.
+  </p>
+
+  <h2>The problem: who gets the blame?</h2>
+
+  <p>
+    A network makes an error. Somewhere among its 22 million parameters, some weights
+    pushed the output toward the mistake, some away, most barely mattered. To apply
+    M1.4's update rule we need <em>each parameter's individual slope</em>: "if this one
+    knob nudged up, how much would the loss change?" Measuring that naively — nudge one
+    weight, rerun the whole network, observe, repeat 22 million times — costs 22 million
+    forward passes <em>per training step</em>. Backprop gets every slope in
+    <strong>one</strong> backward sweep. That efficiency is why deep learning is
+    possible at all.
+  </p>
+
+  <h2>The idea: blame flows backward through the pipes</h2>
+
+  <p>
+    M1.4's chain rule said: when effects pass through stages, sensitivities multiply
+    (dial → heat → browning = 3 × 2 = 6). A network is exactly that — a pipeline of
+    stages. So: start at the loss with blame = 1, walk backward, and at each stage
+    <strong>multiply the incoming blame by that stage's local slope</strong>. Where
+    paths merge, blames add. Every parameter reads off its final blame as the product
+    of everything downstream of it. Watch it happen with real numbers:
+  </p>
+
+  <figure class="anim" id="fig-blame">
+    <div class="fig-title">Animation · Blame flowing through a 3-stage pipeline</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-bl-t">
+      <title id="fig-bl-t">Forward pass then backward blame propagation with concrete numbers</title>
+      <!-- pipeline nodes -->
+      <g id="nodes">
+        <rect x="30" y="120" width="120" height="64" rx="12" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+        <text x="90" y="147" text-anchor="middle" font-size="18" fill="#1d4ed8" font-weight="700">w = 2.0</text>
+        <text x="90" y="171" text-anchor="middle" font-size="17" fill="#64748b">a weight</text>
+
+        <rect x="215" y="120" width="130" height="64" rx="12" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+        <text x="280" y="147" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">× x (x=3)</text>
+        <text x="280" y="171" text-anchor="middle" font-size="17" fill="#64748b">local slope: 3</text>
+
+        <rect x="410" y="120" width="130" height="64" rx="12" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+        <text x="475" y="147" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">bend</text>
+        <text x="475" y="171" text-anchor="middle" font-size="17" fill="#64748b">local slope: 0.5</text>
+
+        <rect x="410" y="260" width="130" height="64" rx="12" fill="#fef3c7" stroke="#fcd34d" stroke-width="2"/>
+        <text x="475" y="287" text-anchor="middle" font-size="18" fill="#b45309" font-weight="700">loss</text>
+        <text x="475" y="311" text-anchor="middle" font-size="17" fill="#64748b">local slope: 2</text>
+      </g>
+      <!-- forward arrows -->
+      <g id="fwd-arrows">
+        <line x1="154" y1="152" x2="209" y2="152" stroke="#94a3b8" stroke-width="3" marker-end="url(#bp-g)"/>
+        <line x1="349" y1="152" x2="404" y2="152" stroke="#94a3b8" stroke-width="3" marker-end="url(#bp-g)"/>
+        <path d="M 475 188 L 475 254" stroke="#94a3b8" stroke-width="3" marker-end="url(#bp-g)" fill="none"/>
+      </g>
+      <!-- backward blame arrows -->
+      <g id="b1" class="sp-hide">
+        <rect x="560" y="272" width="70" height="40" rx="9" fill="#dc2626"/>
+        <text x="595" y="299" text-anchor="middle" font-size="18" fill="#fff" class="mono">1.0</text>
+        <text x="595" y="258" text-anchor="middle" font-size="17" fill="#dc2626">start: blame=1</text>
+      </g>
+      <g id="b2" class="sp-hide">
+        <path d="M 462 254 L 462 194" stroke="#dc2626" stroke-width="3.5" marker-end="url(#bp-r)" fill="none"/>
+        <rect x="360" y="210" width="88" height="36" rx="9" fill="#dc2626"/>
+        <text x="404" y="235" text-anchor="middle" font-size="17" fill="#fff" class="mono">1×2 = 2</text>
+      </g>
+      <g id="b3" class="sp-hide">
+        <line x1="404" y1="138" x2="352" y2="138" stroke="#dc2626" stroke-width="3.5" marker-end="url(#bp-r)"/>
+        <rect x="238" y="80" width="110" height="36" rx="9" fill="#dc2626"/>
+        <text x="293" y="105" text-anchor="middle" font-size="17" fill="#fff" class="mono">2×0.5 = 1</text>
+      </g>
+      <g id="b4" class="sp-hide">
+        <line x1="209" y1="138" x2="157" y2="138" stroke="#dc2626" stroke-width="3.5" marker-end="url(#bp-r)"/>
+        <rect x="42" y="80" width="96" height="36" rx="9" fill="#dc2626"/>
+        <text x="90" y="105" text-anchor="middle" font-size="17" fill="#fff" class="mono">1×3 = 3</text>
+      </g>
+      <g id="verdict" class="sp-hide">
+        <rect x="30" y="352" width="580" height="56" rx="10" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="320" y="376" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">w's slope = 3 → update: w ← 2.0 − η·3</text>
+        <text x="320" y="400" text-anchor="middle" font-size="17" fill="#047857">one backward sweep prices every parameter's blame</text>
+      </g>
+      <defs>
+        <marker id="bp-g" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#94a3b8"/></marker>
+        <marker id="bp-r" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#dc2626"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-bl-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-blame svg",
+        caption: "#fig-bl-cap",
+        steps: [
+          { caption: "Forward pass done (grey arrows). Each stage recorded one number during it: its <b>local slope</b> — how sensitive its output is to its input. ×3 for the multiply, 0.5 for the bend at this input, 2 for the loss." },
+          { caption: "Backward starts at the loss with blame = 1.0 (the loss is perfectly sensitive to itself).", show: ["#b1"] },
+          { caption: "Step back through the loss stage: multiply blame by its local slope. 1 × 2 = <b>2</b>.", show: ["#b2"] },
+          { caption: "Through the bend: 2 × 0.5 = <b>1</b>. (Notice: a flat bend — slope near 0 — would have crushed the blame here. Hold that thought.)", show: ["#b3"] },
+          { caption: "Through the multiply-by-x stage: 1 × 3 = <b>3</b>. That's w's slope: nudging w by 1 moves the loss by ~3.", show: ["#b4"] },
+          { caption: "Update w with M1.4's rule and move on. In a real net the same sweep visits every layer once — millions of slopes for the price of one backward pass.", show: ["#verdict"], holdMs: 5600 }
+        ]
+      });
+    });
+  </script>
+
+  <p>
+    Two bookkeeping rules complete the algorithm: where a value feeds <em>multiple</em>
+    downstream paths, its blames <strong>add</strong> (it contributed to every path);
+    and each stage's local slope was already computed <em>during the forward pass</em>
+    and cached — this is why training needs so much memory (the "activations" bill in
+    M7.2) and why the backward pass costs roughly 2× the forward pass in compute.
+  </p>
+
+  <h2>Vanishing and exploding gradients: blame arithmetic gone wrong</h2>
+
+  <p>
+    Backward blame is a <strong>product of local slopes</strong> — one factor per layer.
+    Products of many numbers have two failure modes, and both made pre-2015 deep
+    learning miserable:
+  </p>
+
+  <figure class="anim" id="fig-vanish">
+    <div class="fig-title">Animation · Death by multiplication</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-v-t">
+      <title id="fig-v-t">Gradient shrinking through ten layers of small slopes</title>
+      <text x="30" y="46" font-size="18" class="sv-ink" font-weight="700">blame passing through 10 layers, each with local slope 0.5:</text>
+      <!-- bars shrinking -->
+      <g id="bars10" class="mono">
+        <rect x="40"  y="80" width="44" height="180" rx="6" fill="#dc2626"/><text x="62" y="286" text-anchor="middle" font-size="17" class="sv-ink">L10</text>
+        <rect x="96"  y="170" width="44" height="90" rx="6" fill="#e05252"/><text x="118" y="286" text-anchor="middle" font-size="17" class="sv-ink">L9</text>
+        <rect x="152" y="215" width="44" height="45" rx="6" fill="#e57373"/><text x="174" y="286" text-anchor="middle" font-size="17" class="sv-ink">L8</text>
+        <rect x="208" y="237" width="44" height="23" rx="6" fill="#eb9494"/><text x="230" y="286" text-anchor="middle" font-size="17" class="sv-ink">L7</text>
+        <rect x="264" y="249" width="44" height="11" rx="5" fill="#f0b5b5"/><text x="286" y="286" text-anchor="middle" font-size="17" class="sv-ink">L6</text>
+        <rect x="320" y="254" width="44" height="6" rx="3" fill="#f5d0d0"/><text x="342" y="286" text-anchor="middle" font-size="17" class="sv-ink">L5</text>
+        <rect x="376" y="257" width="44" height="3" rx="1.5" fill="#f8dede"/><text x="398" y="286" text-anchor="middle" font-size="17" class="sv-ink">L4</text>
+        <rect x="432" y="258.5" width="44" height="1.5" rx="0.7" fill="#fae8e8"/><text x="454" y="286" text-anchor="middle" font-size="17" class="sv-ink">L3</text>
+        <rect x="488" y="259.2" width="44" height="0.8" fill="#fcf0f0"/><text x="510" y="286" text-anchor="middle" font-size="17" class="sv-ink">L2</text>
+        <rect x="544" y="259.6" width="44" height="0.4" fill="#fdf5f5"/><text x="566" y="286" text-anchor="middle" font-size="17" class="sv-ink">L1</text>
+      </g>
+      <g id="mathlbl" class="sp-hide">
+        <rect x="120" y="110" width="420" height="42" rx="10" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="330" y="138" text-anchor="middle" font-size="18" class="mono" fill="#b91c1c">0.5¹⁰ ≈ 0.001 — layer 1 hears nothing</text>
+      </g>
+      <g id="fixes" class="sp-hide">
+        <rect x="60" y="306" width="520" height="44" rx="10" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="320" y="334" text-anchor="middle" font-size="17" fill="#047857">fixes: ReLU (slope 1), careful init, residual highways (M5.5), LayerNorm</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-v-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-vanish svg",
+        caption: "#fig-v-cap",
+        steps: [
+          { caption: "Sigmoid-era networks: each layer's local slope tops out at 0.25–0.5. Watch blame decay as it travels backward from layer 10 toward layer 1." },
+          { caption: "Ten layers of ×0.5 = one-thousandth of the signal. Early layers get essentially zero gradient — they simply stop learning. This is the <b>vanishing gradient</b> problem that capped network depth for decades. (Slopes >1 give the mirror disaster: <b>exploding</b> gradients, NaN city.)", show: ["#mathlbl"], holdMs: 5600 },
+          { caption: "The modern fixes are a theme of this course: ReLU/GELU keep slopes near 1; smart initialization keeps products stable; and the big one — residual connections — gives blame a highway that skips the multiplication entirely. That's why M5.5 exists, and now you know what problem it solves.", show: ["#fixes"], holdMs: 5600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>What autograd does for you</h2>
+
+  <p>
+    Nobody derives these slopes by hand anymore. PyTorch/JAX build a <strong>computation
+    graph</strong> as your forward code runs — every operation records itself and its
+    local-slope recipe. Then <code>loss.backward()</code> replays the graph in reverse,
+    doing exactly this page's multiply-and-add blame arithmetic, depositing each
+    parameter's slope in <code>param.grad</code>, and <code>optimizer.step()</code>
+    applies the update rule. The three most-typed lines in deep learning —
+    <code>loss.backward(); optimizer.step(); optimizer.zero_grad()</code> — are:
+    run this page, run M1.4, clear the blame ledger for the next batch.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Cost accounting for one training step, industry rule of thumb: backward pass ≈
+      <strong>2× the forward pass</strong> FLOPs (it computes both input-blames and
+      weight-blames per layer), so training ≈ 3× inference per token — before adding
+      optimizer state. The cached local slopes ("saved activations") are why a model
+      you can <em>run</em> in 14 GB needs 50+ GB to <em>train</em> (precise ledger:
+      M7.2). And gradient checkpointing (M7.3) is literally: throw away some cached
+      slopes, recompute them during backward — trading this page's memory for compute.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Every "vanishing gradient" reference you've ever skimmed past now has a picture:
+      shrinking red bars. It explains history (why nets stayed shallow until ~2015),
+      architecture (why transformers are lattices of residual highways — M5.5), and even
+      RNN extinction (M4.2: a 100-word sentence = a 100-layer-deep blame product —
+      unworkable, which is <em>why</em> attention had to be invented). One picture,
+      three modules of foreshadowing.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: verify the blame math with PyTorch autograd</div>
+<pre><code>import torch
+
+# this page's exact pipeline: w → ×x → bend → loss
+w = torch.tensor(2.0, requires_grad=True)
+x = 3.0
+z = w * x                       # local slope w.r.t. w: 3
+a = torch.sigmoid(z)            # a bend; autograd knows its local slope
+loss = 2.0 * a                  # local slope: 2
+
+loss.backward()                 # blame flows backward, exactly as animated
+print(w.grad)                   # = 2 × sigmoid'(6) × 3 ≈ 0.0148
+
+# why so small? sigmoid'(6) ≈ 0.0025 — you just witnessed a vanishing gradient!
+# z=6 sits on sigmoid's flat shoulder. Try x=0.3 (z=0.6, steep region) and
+# watch w.grad grow ~50×. The animation's 'flat bend crushes blame' — live.
+</code></pre>
+    <p>
+      One extra experiment: chain 10 sigmoids (<code>a = torch.sigmoid(a)</code> in a
+      loop) and print <code>w.grad</code> — then swap in <code>torch.relu</code> and
+      compare. The vanishing-gradient story, falsifiable on your laptop in 20 seconds.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Backprop = <strong>blame flowing backward, multiplying by each stage's local slope,
+    adding where paths merge</strong> — the chain rule with a filing system, computing
+    every parameter's gradient in one sweep. Its failure mode (long products shrinking
+    or exploding) explains half of modern architecture design, including the residual
+    connections at the heart of every transformer you use.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Explain backpropagation without heavy notation.</summary>
+      <div><p>The forward pass computes the output and caches each operation's local sensitivity. The backward pass starts at the loss with gradient 1 and walks the graph in reverse: at each operation it multiplies the incoming gradient by that operation's local slope (chain rule), summing where a value feeds multiple paths. One backward sweep yields ∂loss/∂parameter for every parameter simultaneously — the efficiency that makes training million-parameter models feasible.</p></div>
+    </details>
+    <details>
+      <summary>What causes vanishing gradients, and name four mitigations.</summary>
+      <div><p>The backward gradient is a product of per-layer local slopes; when those are consistently &lt;1 (sigmoid/tanh saturate at ≤0.25/≤1 and are near 0 on their shoulders), the product decays exponentially with depth — early layers receive ~no signal. Mitigations: ReLU/GELU activations (slope ≈1 in the active region), proper initialization (Xavier/He keep signal variance stable), residual connections (an additive path whose local slope is exactly 1 — gradient flows unimpeded), and normalization layers (Batch/LayerNorm keep activations in the steep region). Transformers use the last three simultaneously.</p></div>
+    </details>
+    <details>
+      <summary>Why does training take ~3× the compute of inference, and much more memory?</summary>
+      <div><p>Compute: forward pass (1×) plus backward pass (~2× — gradients w.r.t. both activations and weights per layer). Memory: backward needs each layer's cached forward activations to compute local slopes, so memory scales with depth × batch × sequence length, on top of parameters, gradients and optimizer state. Gradient checkpointing trades this: discard some activations, recompute them during backward — ~30% more compute for large memory savings.</p></div>
+    </details>
+    <details>
+      <summary>What do loss.backward(), optimizer.step() and optimizer.zero_grad() each do?</summary>
+      <div><p><code>backward()</code>: runs reverse-mode autodiff over the recorded computation graph, accumulating each parameter's gradient into <code>.grad</code>. <code>step()</code>: applies the update rule (SGD/Adam) using those gradients. <code>zero_grad()</code>: clears the accumulated gradients — because PyTorch adds into <code>.grad</code> by design (useful for gradient accumulation), forgetting this line silently sums gradients across batches, a classic bug whose symptom is training that behaves like the learning rate keeps growing.</p></div>
+    </details>
+    <details>
+      <summary>Why do gradients "add where paths merge"?</summary>
+      <div><p>If a value influences the loss through several routes (e.g., a hidden activation feeding many next-layer neurons, or a weight-tied embedding used twice), the total effect of nudging it is the sum of its effects along each route — basic calculus of total derivatives. Practically this is why shared/tied parameters (like tied input/output embeddings in language models) receive summed gradients from all their uses.</p></div>
+    </details>
+    <details>
+      <summary>Interviewer: "Could we train without backprop — say, by tweaking weights randomly?"</summary>
+      <div><p>In principle yes (evolutionary strategies, random perturbation), and such methods exist for tiny or non-differentiable problems. But they estimate gradients with variance scaling with parameter count — hopeless at 10⁶–10¹¹ parameters — while backprop computes exact gradients for all parameters at ~3× forward cost. The honest framing: backprop is not conceptually necessary but is computationally the only game in town at scale (with RL — M8.4 — as the structured exception where the objective itself isn't differentiable).</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

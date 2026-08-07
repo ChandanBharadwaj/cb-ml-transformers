@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Measuring Models: Precision, Recall, F1 — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="03-neural-nets/measuring-models">
+<main id="content">
+
+  <h1>Measuring Models: Precision, Recall, F1</h1>
+
+  <p>
+    You asked for measurement and benchmarking to be a spine of this course — this page
+    is where that spine starts. The vocabulary here (precision, recall, F1, thresholds,
+    baselines) returns verbatim when we evaluate NER (M10), retrieval (M9.5, M12), and
+    LLMs (M11.4). It's also the single most reliably-asked interview cluster in all of
+    ML. Worth doing slowly and once.
+  </p>
+
+  <h2>Accuracy, and the lie it tells</h2>
+
+  <p>
+    Accuracy = fraction correct. Intuitive, and dangerously misleading the moment
+    classes are imbalanced — which in real life is almost always. The canonical horror
+    story: a spam filter on traffic that's 1% spam. A model that predicts
+    <strong>"not spam" for everything</strong> scores <strong>99% accuracy</strong>
+    while catching zero spam. The number is high; the model is useless. Whenever one
+    class is rare — fraud, disease, relevant documents, entities in text — accuracy
+    mostly measures the imbalance, not the model.
+  </p>
+
+  <h2>The confusion matrix: where every prediction lands</h2>
+
+  <p>
+    Fix: stop averaging everything into one number and sort predictions into four boxes.
+    Convention: "positive" = the rare/interesting class you're hunting.
+  </p>
+
+  <figure class="anim" id="fig-cm">
+    <div class="fig-title">Animation · The four boxes</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-cm-t">
+      <title id="fig-cm-t">Confusion matrix filling with the four outcome types</title>
+      <!-- grid -->
+      <g id="grid">
+        <text x="392" y="42" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">actually spam?</text>
+        <text x="285" y="74" text-anchor="middle" font-size="17" fill="#64748b">yes</text>
+        <text x="500" y="74" text-anchor="middle" font-size="17" fill="#64748b">no</text>
+        <text x="60" y="150" text-anchor="middle" font-size="17" fill="#64748b">said</text>
+        <text x="60" y="172" text-anchor="middle" font-size="17" fill="#64748b">spam</text>
+        <text x="60" y="290" text-anchor="middle" font-size="17" fill="#64748b">said</text>
+        <text x="60" y="312" text-anchor="middle" font-size="17" fill="#64748b">clean</text>
+        <rect x="180" y="88" width="210" height="140" rx="12" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+        <rect x="395" y="88" width="210" height="140" rx="12" fill="#fee2e2" stroke="#fca5a5" stroke-width="2"/>
+        <rect x="180" y="233" width="210" height="140" rx="12" fill="#fee2e2" stroke="#fca5a5" stroke-width="2"/>
+        <rect x="395" y="233" width="210" height="140" rx="12" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      </g>
+      <g id="tp" class="sp-hide">
+        <text x="285" y="140" text-anchor="middle" font-size="19" fill="#047857" font-weight="700">TP: true positive</text>
+        <text x="285" y="168" text-anchor="middle" font-size="17" fill="#047857">caught real spam ✓</text>
+        <text id="tp-n" x="285" y="204" text-anchor="middle" font-size="20" class="mono" fill="#047857">40</text>
+      </g>
+      <g id="fp" class="sp-hide">
+        <text x="500" y="140" text-anchor="middle" font-size="19" fill="#b91c1c" font-weight="700">FP: false positive</text>
+        <text x="500" y="168" text-anchor="middle" font-size="17" fill="#b91c1c">real mail in spam folder!</text>
+        <text id="fp-n" x="500" y="204" text-anchor="middle" font-size="20" class="mono" fill="#b91c1c">10</text>
+      </g>
+      <g id="fn" class="sp-hide">
+        <text x="285" y="285" text-anchor="middle" font-size="19" fill="#b91c1c" font-weight="700">FN: false negative</text>
+        <text x="285" y="313" text-anchor="middle" font-size="17" fill="#b91c1c">spam slipped through!</text>
+        <text id="fn-n" x="285" y="349" text-anchor="middle" font-size="20" class="mono" fill="#b91c1c">20</text>
+      </g>
+      <g id="tn" class="sp-hide">
+        <text x="500" y="285" text-anchor="middle" font-size="19" class="sv-ink" font-weight="700">TN: true negative</text>
+        <text x="500" y="313" text-anchor="middle" font-size="17" fill="#64748b">clean mail, delivered ✓</text>
+        <text id="tn-n" x="500" y="349" text-anchor="middle" font-size="20" class="mono" fill="#64748b">9930</text>
+      </g>
+      <g id="lbl-acc" class="sp-hide">
+        <rect x="120" y="386" width="440" height="30" rx="9" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="340" y="407" text-anchor="middle" font-size="17" fill="#92400e">accuracy = (40+9930)/10000 = 99.7% … looks amazing. Is it?</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-cm-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-cm svg",
+        caption: "#fig-cm-cap",
+        steps: [
+          { caption: "Rows: what the model said. Columns: the truth. Every prediction lands in exactly one of four boxes." },
+          { caption: "<b>True positives</b>: said spam, was spam. The catches. 40 of them.", show: ["#tp"] },
+          { caption: "<b>False positives</b>: said spam, was legitimate. Your boss's email in the spam folder — the embarrassing error. 10.", show: ["#fp"] },
+          { caption: "<b>False negatives</b>: said clean, was spam. Slipped into the inbox — the missed error. 20.", show: ["#fn"] },
+          { caption: "<b>True negatives</b>: the easy majority. 9,930 clean mails correctly delivered.", show: ["#tn"] },
+          { caption: "Accuracy blends all four into 99.7% and hides that we MISSED a third of all spam. The next two metrics refuse to blend.", show: ["#lbl-acc"], holdMs: 5600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Precision and recall: two questions, not one</h2>
+
+  <div class="formula">
+    <div class="math">precision = TP / (TP + FP) &nbsp;&nbsp;·&nbsp;&nbsp; recall = TP / (TP + FN)</div>
+    <div class="plain">
+      <b>In plain words — memorize these as questions:</b>
+      Precision: <b>"of everything I flagged, how much was right?"</b> (trustworthiness
+      of the alarms). Recall: <b>"of everything out there, how much did I find?"</b>
+      (coverage of the hunt). Above: precision = 40/50 = <b>0.80</b>, recall = 40/60 =
+      <b>0.67</b> — the 99.7%-accuracy model suddenly looks mortal.
+    </div>
+  </div>
+
+  <p>
+    The two trade off through the model's decision <strong>threshold</strong>. A
+    classifier outputs a score (3.2's probability); <em>you</em> pick the cutoff.
+    Raise it → fussier alarms → precision up, recall down. Lower it → catch everything
+    → recall up, precision drowns in false alarms. The threshold is a business decision
+    wearing a math costume:
+  </p>
+
+  <figure class="anim" id="fig-thresh">
+    <div class="fig-title">Animation · The threshold slider</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-th-t">
+      <title id="fig-th-t">Two score distributions and a movable decision threshold</title>
+      <!-- axis -->
+      <line x1="40" y1="270" x2="610" y2="270" stroke="#cbd5e1" stroke-width="2.5"/>
+      <text x="325" y="300" text-anchor="middle" font-size="17" fill="#64748b">model score: "how spammy?" →</text>
+      <!-- clean distribution (left hump) -->
+      <path d="M 60 270 C 130 110, 230 110, 320 262 L 320 270 Z" fill="#93c5fd" opacity="0.55"/>
+      <text x="165" y="100" text-anchor="middle" font-size="18" fill="#1d4ed8" font-weight="700">clean mail</text>
+      <!-- spam distribution (right hump, overlapping) -->
+      <path d="M 250 270 C 340 130, 450 130, 570 262 L 570 270 Z" fill="#fcd34d" opacity="0.6"/>
+      <text x="452" y="118" text-anchor="middle" font-size="18" fill="#b45309" font-weight="700">spam</text>
+      <text x="292" y="252" text-anchor="middle" font-size="17" fill="#64748b">overlap = unavoidable errors</text>
+      <!-- threshold line -->
+      <g id="thr">
+        <line id="thr-line" x1="330" y1="80" x2="330" y2="270" stroke="#059669" stroke-width="4"/>
+        <text id="thr-lbl" x="330" y="62" text-anchor="middle" font-size="18" fill="#047857" font-weight="700">threshold</text>
+      </g>
+      <g id="readout">
+        <rect x="150" y="316" width="360" height="38" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text id="ro-txt" x="330" y="342" text-anchor="middle" font-size="18" class="mono sv-ink">precision 0.80 · recall 0.67</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-th-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-thresh svg",
+        caption: "#fig-th-cap",
+        steps: [
+          { caption: "Two humps: score distributions for clean mail and spam. They overlap — some errors are unavoidable no matter where you cut. Everything right of the green line gets flagged." },
+          { caption: "Slide the threshold RIGHT (fussy): almost everything flagged really is spam (precision ↑ 0.97) but lots of spam escapes (recall ↓ 0.35). Choose this when false alarms are expensive — like auto-deleting mail.",
+            move: { "#thr-line": [130, 0], "#thr-lbl": [130, 0] },
+            attrs: { "#ro-txt": { textContent: "precision 0.97 · recall 0.35" } }, holdMs: 5600 },
+          { caption: "Slide it LEFT (paranoid): nearly all spam caught (recall ↑ 0.96) but the spam folder fills with real mail (precision ↓ 0.42). Choose this when a miss is expensive — fraud, cancer screening.",
+            move: { "#thr-line": [-130, 0], "#thr-lbl": [-130, 0] },
+            attrs: { "#ro-txt": { textContent: "precision 0.42 · recall 0.96" } }, holdMs: 5600 },
+          { caption: "Same model all along — only the cutoff moved. Precision/recall isn't a property of the model alone; it's model + threshold + your cost structure.",
+            move: {}, attrs: { "#ro-txt": { textContent: "precision 0.80 · recall 0.67" } }, holdMs: 5200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>F1, and how to average across classes</h2>
+
+  <div class="formula">
+    <div class="math">F1 = 2 · (precision · recall) / (precision + recall)</div>
+    <div class="plain">
+      <b>In plain words:</b> the harmonic mean — a strict average that stays low unless
+      BOTH are decent (precision 1.0 with recall 0.01 gives F1 ≈ 0.02, not 0.5). One
+      number for leaderboards; the P/R pair for actual decisions. Above:
+      F1 = 2·(0.80·0.67)/(0.80+0.67) ≈ <b>0.73</b>.
+    </div>
+  </div>
+
+  <p>
+    With multiple classes (say, NER's person/org/location), two averaging conventions:
+    <strong>micro</strong> — pool all TP/FP/FN counts, then compute once (big classes
+    dominate; equals accuracy in single-label settings); <strong>macro</strong> —
+    compute F1 per class, then average the F1s (every class votes equally, so rare-class
+    failure shows up). Reporting both is the grown-up move; quoting only the flattering
+    one is the classic leaderboard sleight-of-hand to watch for.
+  </p>
+
+  <h2>Baselines: the vaccine against self-congratulation</h2>
+
+  <p>
+    A metric without a baseline is a number in a void. Before celebrating any model,
+    price these two: the <strong>majority-class baseline</strong> (predict the most
+    common label always — the "99% accuracy" trap quantified) and a
+    <strong>cheap strong baseline</strong> — for text classification, TF-IDF + logistic
+    regression, which is embarrassingly hard to beat on many tasks. If your fine-tuned
+    transformer beats majority-class but not TF-IDF+LR, you've built an expensive way
+    to underperform 2003. (Next page you'll build both and check.)
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      The spam example, complete: accuracy <strong>99.7%</strong>, precision
+      <strong>0.80</strong>, recall <strong>0.67</strong>, F1 <strong>0.73</strong> —
+      four numbers, one model, and only the last three tell the truth. For calibration
+      elsewhere: strong NER systems hit span-F1 ≈ 0.93 on news (M10.1); a good RAG
+      retriever hits recall@5 ≈ 0.85+ on clean domains (M9.5); and email spam filters in
+      production run precision ≈ 0.999 with recall ≈ 0.95 — because one false positive
+      (lost real mail) costs more than ten misses. Cost asymmetry decides the threshold,
+      always.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      You've already lived this trade-off without the names: GLiNER's
+      <code>threshold</code> parameter — the one you tuned by feel — is exactly this
+      page's green slider. Raise it: fewer, surer entities (precision). Lower it: more,
+      noisier ones (recall). In M10.2 you'll measure it properly with span-F1. And when
+      M9.5 asks "did retrieval find the right chunk in the top 5?" — that's recall
+      wearing its retrieval uniform (recall@k). One vocabulary, your whole stack.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: compute everything from raw counts, then verify</div>
+<pre><code>import numpy as np
+
+def report(tp, fp, fn, tn):
+    acc  = (tp + tn) / (tp + fp + fn + tn)
+    prec = tp / (tp + fp)
+    rec  = tp / (tp + fn)
+    f1   = 2 * prec * rec / (prec + rec)
+    print(f"acc {acc:.3f}  precision {prec:.3f}  recall {rec:.3f}  F1 {f1:.3f}")
+
+report(tp=40, fp=10, fn=20, tn=9930)     # the page's example
+
+# threshold sweep on synthetic scores — reproduce the slider:
+rng = np.random.default_rng(1)
+scores = np.concatenate([rng.normal(0.35, 0.13, 9900),   # clean
+                         rng.normal(0.72, 0.13, 100)])   # spam
+truth = np.array([0]*9900 + [1]*100)
+for t in [0.5, 0.65, 0.8]:
+    pred = (scores > t).astype(int)
+    tp = ((pred==1)&(truth==1)).sum(); fp = ((pred==1)&(truth==0)).sum()
+    fn = ((pred==0)&(truth==1)).sum(); tn = ((pred==0)&(truth==0)).sum()
+    print(f"threshold {t}: ", end=""); report(tp, fp, fn, tn)
+</code></pre>
+    <p>
+      Watch accuracy barely move across thresholds while precision and recall swing
+      wildly — the whole page's argument in one printout. Then check against
+      <code>sklearn.metrics.classification_report</code> for the professional version.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Accuracy averages over a lie when classes are imbalanced. Think in the four boxes;
+    ask precision's question (<em>"when I flag, am I right?"</em>) and recall's
+    (<em>"do I find them all?"</em>); remember the threshold trades one for the other
+    according to <em>your</em> error costs; and never report a metric without its
+    baseline. This vocabulary is the measuring tape for everything else in the course.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>When is accuracy a misleading metric, and what do you use instead?</summary>
+      <div><p>Under class imbalance: with 1% positives, always-predict-negative scores 99% while being useless. Use precision/recall/F1 for the minority class (plus the confusion matrix), PR curves across thresholds, and always compare to the majority-class baseline. Accuracy is fine when classes are balanced and errors cost the same — rare in practice.</p></div>
+    </details>
+    <details>
+      <summary>Define precision and recall as plain questions, and give a case favoring each.</summary>
+      <div><p>Precision: "of what I flagged, how much was right?" Recall: "of what exists, how much did I find?" Favor precision when false alarms are costly: auto-deleting spam, auto-blocking users, triggering pager alerts. Favor recall when misses are costly: cancer screening, fraud detection, legal discovery — flag liberally, review downstream. The threshold implements the choice.</p></div>
+    </details>
+    <details>
+      <summary>Why is F1 the harmonic rather than arithmetic mean?</summary>
+      <div><p>The harmonic mean punishes imbalance: precision 1.0 with recall 0.01 averages to 0.505 arithmetically (looks half-decent) but 0.02 harmonically (correctly terrible). Since gaming one metric at the other's expense is trivial (flag everything → recall 1.0), a useful single number must require both to be good simultaneously — exactly the harmonic mean's behavior.</p></div>
+    </details>
+    <details>
+      <summary>Micro vs macro F1 — difference, and when each misleads.</summary>
+      <div><p>Micro pools all TP/FP/FN across classes then computes once — dominated by frequent classes; a model that fails completely on a rare class can still score high. Macro computes per-class F1 and averages — every class equal, so it exposes rare-class failure, but can look harsh if some tiny class is inherently noisy. Report both; a large micro–macro gap is itself the diagnostic (it means performance is uneven across classes).</p></div>
+    </details>
+    <details>
+      <summary>How do you choose a classification threshold in production?</summary>
+      <div><p>From error costs, not defaults: estimate the cost of a false positive vs a false negative, sweep the threshold on validation data, and pick the point optimizing expected cost (or satisfying a constraint like "precision ≥ 0.99, maximize recall"). Revisit when class balance or costs drift. Saying "0.5 because that's the default" is the wrong answer; "0.5 is arbitrary — here's my cost analysis" is the right one.</p></div>
+    </details>
+    <details>
+      <summary>Your new transformer classifier hits 91% accuracy. The interviewer asks: "Good?" What do you need to answer?</summary>
+      <div><p>(1) Class balance — if 90% of examples are one class, 91% is barely above the majority baseline. (2) A cheap strong baseline — TF-IDF + logistic regression often lands within a few points on text tasks; beating it justifies the transformer's cost. (3) Per-class P/R/F1 — the aggregate can hide a dead minority class. (4) The cost structure — which errors hurt. "91% is uninterpretable without baselines and per-class breakdown" is itself the correct answer.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

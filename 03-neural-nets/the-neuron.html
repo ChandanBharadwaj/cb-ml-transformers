@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Neuron — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="03-neural-nets/the-neuron">
+<main id="content">
+
+  <h1>The Neuron</h1>
+
+  <p>
+    Time to build the machine. This module takes you from a single neuron to a trained,
+    evaluated classifier you build yourself — the complete mental toolkit that Modules 4
+    and 5 assume. The good news: after M1, a neuron contains exactly <em>one</em> new
+    idea. Everything else you already own.
+  </p>
+
+  <h2>A neuron is a dot product you've already met</h2>
+
+  <p>
+    Strip the biology metaphor. A neuron takes a vector of inputs, multiplies each input
+    by a learned weight, adds them up, adds a learned bias — and that's M1.2's
+    <strong>dot product plus M1.3's bias</strong>:
+  </p>
+
+  <div class="formula">
+    <div class="math">z = w · x + b</div>
+    <div class="plain">
+      <b>In plain words:</b> a weighted opinion poll. Each input gets a learned weight
+      saying "how much do I care about you (and in which direction)"; the bias sets how
+      easy the neuron is to please overall. One number out: the neuron's raw enthusiasm,
+      called the <b>pre-activation</b> or <b>logit</b>.
+    </div>
+  </div>
+
+  <figure class="anim" id="fig-neuron">
+    <div class="fig-title">Animation · One neuron, knob by knob</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-n-t">
+      <title id="fig-n-t">Inputs times weights summed with bias, then passed through an activation</title>
+      <!-- inputs -->
+      <g id="inputs" class="mono">
+        <text x="30" y="70" font-size="18" class="sv-ink">x₁ = 2.0</text>
+        <text x="30" y="150" font-size="18" class="sv-ink">x₂ = −1.0</text>
+        <text x="30" y="230" font-size="18" class="sv-ink">x₃ = 0.5</text>
+      </g>
+      <!-- weight edges -->
+      <g id="weights">
+        <line x1="145" y1="64" x2="300" y2="140" stroke="#2563eb" stroke-width="5"/>
+        <text x="200" y="80" font-size="17" fill="#1d4ed8" class="mono">w₁ = 0.9</text>
+        <line x1="145" y1="144" x2="300" y2="152" stroke="#94a3b8" stroke-width="2"/>
+        <text x="200" y="132" font-size="17" fill="#64748b" class="mono">w₂ = 0.1</text>
+        <line x1="145" y1="224" x2="300" y2="164" stroke="#dc2626" stroke-width="3.5"/>
+        <text x="200" y="216" font-size="17" fill="#dc2626" class="mono">w₃ = −0.6</text>
+      </g>
+      <!-- soma -->
+      <g id="soma">
+        <circle cx="345" cy="152" r="44" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2.5"/>
+        <text x="345" y="146" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">Σ + b</text>
+        <text x="345" y="170" text-anchor="middle" font-size="17" fill="#64748b" class="mono">b = 0.2</text>
+      </g>
+      <g id="zval" class="sp-hide">
+        <rect x="252" y="240" width="380" height="44" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="442" y="269" text-anchor="middle" font-size="17" class="mono sv-ink">z = 1.8 − 0.1 − 0.3 + 0.2 = 1.6</text>
+      </g>
+      <!-- activation gate -->
+      <g id="gate" class="sp-hide">
+        <line x1="392" y1="152" x2="460" y2="152" stroke="#94a3b8" stroke-width="2.5"/>
+        <rect x="464" y="118" width="106" height="68" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="517" y="146" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">bend</text>
+        <path d="M 480 176 L 517 176 L 552 132" fill="none" stroke="#d97706" stroke-width="3.5"/>
+      </g>
+      <g id="out" class="sp-hide">
+        <line x1="574" y1="152" x2="606" y2="152" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#nr-a)"/>
+        <text x="592" y="128" text-anchor="middle" font-size="18" fill="#047857" class="mono" font-weight="700">1.6</text>
+      </g>
+      <g id="lbl-learn" class="sp-hide">
+        <rect x="30" y="308" width="580" height="56" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="320" y="332" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">the weights and bias are the learned parameters —</text>
+        <text x="320" y="356" text-anchor="middle" font-size="17" fill="#1d4ed8">training (M1.4) turns these exact knobs</text>
+      </g>
+      <defs>
+        <marker id="nr-a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#94a3b8"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-n-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-neuron svg",
+        caption: "#fig-n-cap",
+        steps: [
+          { caption: "Three inputs, three learned weights. Edge thickness = |weight|: this neuron cares a lot about x₁, barely about x₂, and negatively about x₃." },
+          { caption: "Weighted sum plus bias: <b>z = 1.6</b>. Just a dot product with an offset — M1 material.", show: ["#zval"] },
+          { caption: "Now the ONE new idea: pass z through a <b>nonlinear bend</b> (activation function).", show: ["#gate"] },
+          { caption: "Output flows on to the next layer. Question: why bother with the bend at all? Next animation answers it.", show: ["#out", "#lbl-learn"], holdMs: 5200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Why the bend is everything</h2>
+
+  <p>
+    Recall M1.3's closing interview question: stacking two matrices collapses into one
+    matrix — W₂(W₁x) = (W₂W₁)x. Pure linear layers, no matter how many, can only draw
+    straight decision lines. The <strong>activation function</strong> — the bend —
+    breaks that collapse. With a bend between layers, composition creates genuinely new
+    shapes: curves, corners, islands. <em>Depth only means something because of the
+    bend.</em>
+  </p>
+
+  <figure class="anim" id="fig-bend">
+    <div class="fig-title">Animation · No bend, no depth</div>
+    <svg viewBox="0 0 640 340" aria-labelledby="fig-b-t">
+      <title id="fig-b-t">Linear layers collapse to a line; a nonlinearity lets the boundary curve</title>
+      <!-- left panel: linear -->
+      <rect x="24" y="30" width="280" height="250" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+      <text x="164" y="58" text-anchor="middle" font-size="18" fill="#64748b" font-weight="700">10 linear layers</text>
+      <g id="pts-l">
+        <circle cx="90" cy="120" r="6" class="sv-a"/><circle cx="120" cy="95" r="6" class="sv-a"/><circle cx="150" cy="130" r="6" class="sv-a"/>
+        <circle cx="200" cy="210" r="6" class="sv-b"/><circle cx="235" cy="185" r="6" class="sv-b"/><circle cx="255" cy="225" r="6" class="sv-b"/>
+        <circle cx="105" cy="235" r="6" class="sv-b"/><circle cx="240" cy="90" r="6" class="sv-a"/>
+      </g>
+      <g id="line-l">
+        <line x1="50" y1="245" x2="290" y2="70" stroke="#dc2626" stroke-width="3.5"/>
+        <text x="164" y="266" text-anchor="middle" font-size="17" fill="#dc2626">still just one straight line</text>
+      </g>
+      <!-- right panel -->
+      <g id="panel-r" class="sp-hide">
+        <rect x="336" y="30" width="280" height="250" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="476" y="58" text-anchor="middle" font-size="18" fill="#64748b" font-weight="700">2 layers + bends</text>
+        <circle cx="402" cy="120" r="6" class="sv-a"/><circle cx="432" cy="95" r="6" class="sv-a"/><circle cx="462" cy="130" r="6" class="sv-a"/>
+        <circle cx="512" cy="210" r="6" class="sv-b"/><circle cx="547" cy="185" r="6" class="sv-b"/><circle cx="567" cy="225" r="6" class="sv-b"/>
+        <circle cx="417" cy="235" r="6" class="sv-b"/><circle cx="552" cy="90" r="6" class="sv-a"/>
+        <path d="M 360 250 C 420 240, 400 160, 460 155 C 520 150, 520 105, 600 72" fill="none" stroke="#059669" stroke-width="3.5"/>
+        <text x="476" y="266" text-anchor="middle" font-size="17" fill="#047857">bends → the boundary can curve</text>
+      </g>
+      <g id="lbl-collapse" class="sp-hide">
+        <rect x="80" y="296" width="480" height="36" rx="9" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="320" y="320" text-anchor="middle" font-size="17" fill="#92400e">W₂(W₁x) = (W₂W₁)x — without a bend, depth is an illusion</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-b-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-bend svg",
+        caption: "#fig-b-cap",
+        steps: [
+          { caption: "Blue vs orange points that no straight line separates. Stack ten LINEAR layers — the composite is still one matrix, so the boundary is still one straight line. Two points are always wrong." },
+          { caption: "Add bends between just two layers and the boundary can curve around the data. This is the entire justification for activation functions.", show: ["#panel-r"] },
+          { caption: "The algebra of the collapse, for your interviews. Bend between layers → no collapse → depth buys expressiveness.", show: ["#lbl-collapse"], holdMs: 5200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Meet the bends: sigmoid, tanh, ReLU, GELU</h2>
+
+  <p>
+    <strong>Sigmoid</strong> squashes any number into (0, 1) — an S-curve. Historically
+    everywhere; today mostly at output time for probabilities (it's the σ from negative
+    sampling!). Its flaw: for large |z| it's nearly flat, so gradients through it vanish
+    (M1.4's chain-of-slopes multiplying by ≈0 — full consequences in 3.4).
+    <strong>Tanh</strong>: same S-shape, range (−1, 1), zero-centered, same flatness flaw.
+  </p>
+  <p>
+    <strong>ReLU</strong> — max(0, z) — was the great simplification: pass positives
+    unchanged, zero out negatives. Cheap, and its slope is exactly 1 for all positive z,
+    so gradients survive deep stacks. Cost: "dead" neurons stuck at 0.
+    <strong>GELU</strong>, the transformer-era default (used by BERT, GPT, and inside
+    MiniLM), is a smoothed ReLU: no hard corner, slightly negative dip near zero, better
+    training dynamics at scale. Practical hierarchy: <em>ReLU = the workhorse idea,
+    GELU = the polished version transformers actually ship with.</em>
+  </p>
+
+  <h2>Layer, width, depth — the vocabulary assembled</h2>
+
+  <p>
+    Stack n neurons side by side, feed them the same input vector: their n weight-rows
+    form exactly M1.3's matrix, and the layer computes <code>activation(Wx + b)</code> —
+    matrix multiply, add bias, bend. <strong>Width</strong> = neurons per layer (the
+    "hidden size": 384 in MiniLM, 12,288 in GPT-3). <strong>Depth</strong> = number of
+    layers (6 in MiniLM-L6, 96 in GPT-3). Width buys parallel pattern detectors per
+    step; depth buys composition — patterns of patterns of patterns. Transformers, as
+    you'll see, are wide <em>and</em> deep, plus one extra trick (attention) that lets
+    positions talk to each other.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      GELU vs ReLU on actual values: ReLU(−0.5) = 0, GELU(−0.5) ≈ <strong>−0.154</strong>;
+      ReLU(0.5) = 0.5, GELU(0.5) ≈ <strong>0.345</strong>; by z = 3 they agree
+      (GELU(3) ≈ 2.996). The difference is only near zero — a soft transition instead of
+      a corner — yet at 100M+ parameter scale that smoothness measurably improves
+      training. MiniLM's config.json says <code>"hidden_act": "gelu"</code>: a field you
+      can now read.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Two flashbacks. (1) word2vec (M2.2) had <em>no</em> activation function — lookup,
+      dot, done. That's why it's called a <em>shallow</em> method: no bends, no
+      composition, just geometry. The leap from word2vec to BERT is, in large part,
+      adding depth-with-bends on top of the same embedding table. (2) Your GLiNER and
+      MiniLM models contain "feed-forward" blocks (M5.5) that are literally this page:
+      Linear → GELU → Linear. About two-thirds of MiniLM's compute is neurons doing
+      exactly what this page's first animation showed.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: a neuron in numpy, and the collapse, verified</div>
+<pre><code>import numpy as np
+
+x = np.array([2.0, -1.0, 0.5])
+w = np.array([0.9, 0.1, -0.6])
+b = 0.2
+z = w @ x + b                      # the whole neuron: one line
+print("z =", z)                    # 1.6 — matches the animation
+
+relu = lambda v: np.maximum(0, v)
+
+# --- prove the collapse ---
+rng = np.random.default_rng(0)
+W1, W2 = rng.normal(size=(4, 3)), rng.normal(size=(2, 4))
+xs = rng.normal(size=(3, 100))
+
+deep_linear = W2 @ (W1 @ xs)          # two linear layers
+collapsed   = (W2 @ W1) @ xs          # one merged matrix
+print(np.allclose(deep_linear, collapsed))   # True — depth was fake
+
+deep_bent = W2 @ relu(W1 @ xs)        # add one bend
+print(np.allclose(deep_bent, collapsed))     # False — depth is now real
+</code></pre>
+    <p>
+      That pair of True/False lines is the deepest fact on this page, verified in
+      milliseconds. Keep this script — 3.7 grows it into a full trained classifier.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Neuron = dot product + bias + <strong>bend</strong>. The bend is the only new idea —
+    and it's load-bearing: without it, a thousand layers equal one. Layers are matrices
+    of neurons; width is neurons-per-layer, depth is layers; and the GELU inside every
+    transformer you use is this page's bend, smoothed for scale.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Why do neural networks need nonlinear activation functions?</summary>
+      <div><p>Because compositions of linear maps are linear: W₂(W₁x) = (W₂W₁)x, so any depth of pure-linear layers collapses to a single matrix and can only represent linear functions (straight decision boundaries). A nonlinearity between layers prevents the collapse, making each added layer genuinely increase expressive power — with enough width/depth, networks with nonlinearities are universal function approximators.</p></div>
+    </details>
+    <details>
+      <summary>Compare sigmoid, ReLU and GELU. Why did transformers pick GELU?</summary>
+      <div><p>Sigmoid: squashes to (0,1), saturates at both ends → vanishing gradients in deep nets; now mainly used for output probabilities. ReLU: max(0,z), cheap, gradient exactly 1 for positive inputs → trains deep networks well, but neurons can "die" at 0. GELU: a smooth, probabilistic relaxation of ReLU (slight negative dip, no corner) with better-behaved gradients near zero — empirically more stable/performant at transformer scale, which is why BERT/GPT/MiniLM use it. Differences are small per-neuron and compound over hundreds of millions of parameters.</p></div>
+    </details>
+    <details>
+      <summary>What exactly is a "logit"?</summary>
+      <div><p>The raw pre-activation score z = w·x + b before any squashing into probabilities. In classification, the final layer outputs one logit per class; softmax (next page) converts them to probabilities. When APIs expose "logprobs" or when papers say "logit lens", they're referring to these raw scores — knowing the term precisely is a cheap credibility win.</p></div>
+    </details>
+    <details>
+      <summary>Width vs depth — what does each buy you?</summary>
+      <div><p>Width (neurons per layer) buys parallel feature detectors at the same level of abstraction — more patterns noticed per step. Depth (layers) buys composition — later layers build features of features, enabling hierarchical abstraction (edges→shapes→objects; tokens→phrases→semantics). Empirically both matter and are scaled together (M7's scaling laws); depth without nonlinearity is worthless, and extreme depth without tricks (residuals, M5.5) is untrainable.</p></div>
+    </details>
+    <details>
+      <summary>A single neuron with a sigmoid — what classic model is that?</summary>
+      <div><p>Logistic regression: σ(w·x + b) is exactly its form. A neural network is logistic-regression-like units stacked and composed with nonlinearities — useful framing both for interviews and for intuition: you already understood the atom; networks are the chemistry.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

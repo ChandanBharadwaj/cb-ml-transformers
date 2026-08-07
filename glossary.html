@@ -12,17 +12,24 @@
   <h1>Glossary</h1>
   <p>Every important term from the course, A–Z, each linking back to the page that teaches it. This list grows as modules are published.</p>
 
+  <h2>B</h2>
+  <p><strong>Bias</strong> — the learned vector added after a layer's matrix multiply (the +b in Wx + b); lets the layer shift space, not just warp it. → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
+  <p><strong>Backpropagation</strong> — blame flowing backward through the network, multiplying by each stage's local slope (chain rule), yielding every parameter's gradient in one sweep. → <a href="03-neural-nets/backprop-intuition.html">Backpropagation, Intuitively</a></p>
+  <p><strong>Batch / mini-batch</strong> — the handful of examples processed per training step; its size trades gradient smoothness against memory. → <a href="03-neural-nets/gradient-descent-training-loop.html">The Training Loop</a></p>
+
   <h2>C</h2>
+  <p><strong>Contrastive learning</strong> — training by pulling positive pairs together and pushing negatives apart in embedding space; powers word2vec, sentence-transformers, CLIP, and RAG retrievers. → <a href="02-embeddings/negative-sampling.html">Negative Sampling</a></p>
+  <p><strong>Cross-entropy</strong> — the loss −log P(truth): a surprise meter that punishes confident mistakes hardest. What LLMs train on. → <a href="03-neural-nets/softmax-and-cross-entropy.html">Softmax &amp; Cross-Entropy</a></p>
   <p><strong>Cosine similarity</strong> — the dot product of two vectors after removing their lengths; measures direction agreement, from −1 to 1. The score behind every vector search. → <a href="01-math/dot-product-similarity.html">Dot Product = Similarity</a></p>
 
   <h2>D</h2>
+  <p><strong>Distributional hypothesis</strong> — "you shall know a word by the company it keeps": words in similar contexts have similar meanings; the license for learning meaning from raw text. → <a href="02-embeddings/one-hot-and-why-it-fails.html">One-Hot &amp; Why It Fails</a></p>
+  <p><strong>Dropout</strong> — randomly zeroing activations during training so features can't co-adapt; off at inference. → <a href="03-neural-nets/optimizers-and-regularization.html">Optimizers &amp; Regularization</a></p>
   <p><strong>Dimension</strong> — one slot in a vector. all-MiniLM's embeddings have 384 of them. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>
   <p><strong>Dot product</strong> — multiply two vectors slot-by-slot and add it all up; one number measuring agreement. → <a href="01-math/dot-product-similarity.html">Dot Product = Similarity</a></p>
 
-  <h2>B</h2>
-  <p><strong>Bias</strong> — the learned vector added after a layer's matrix multiply (the +b in Wx + b); lets the layer shift space, not just warp it. → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
-
   <h2>E</h2>
+  <p><strong>Epoch</strong> — one full pass over the training set; fine-tuning uses a few, LLM pretraining often less than one. → <a href="03-neural-nets/gradient-descent-training-loop.html">The Training Loop</a></p>
   <p><strong>Embedding</strong> — a learned vector that represents meaning, placed so that similar things are near each other. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>
 
   <h2>G</h2>
@@ -31,6 +38,8 @@
   <p><strong>Gradient descent</strong> — repeat: measure the slope, step downhill. The algorithm behind all model training. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
 
   <h2>L</h2>
+  <p><strong>Leakage</strong> — test information contaminating training (shared preprocessing stats, duplicates across splits, temporal mixing); the silent killer of honest metrics. → <a href="03-neural-nets/gradient-descent-training-loop.html">The Training Loop</a></p>
+  <p><strong>Logit</strong> — a raw pre-softmax score (w·x + b); one per class or vocabulary token at a model's output. → <a href="03-neural-nets/the-neuron.html">The Neuron</a></p>
   <p><strong>Learning rate</strong> — how big each downhill step is. Too big bounces, too small crawls. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
   <p><strong>Loss</strong> — a single number scoring how wrong the model currently is; training exists to push it down. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
 
@@ -38,15 +47,29 @@
   <p><strong>Matrix</strong> — a grid of numbers that transforms vectors; every "layer" of a neural network is one (plus a bend). → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
 
   <h2>N</h2>
+  <p><strong>Negative sampling</strong> — replacing the full-vocabulary softmax with "beat k plausible fakes": pull the real pair together, push sampled fakes apart. → <a href="02-embeddings/negative-sampling.html">Negative Sampling</a></p>
+  <p><strong>Neuron</strong> — weighted sum + bias + a nonlinear bend; a layer is a matrix of them. → <a href="03-neural-nets/the-neuron.html">The Neuron</a></p>
   <p><strong>Norm / normalization</strong> — a vector's length (√ of summed squares); dividing by it gives a unit vector so only direction carries meaning. MiniLM normalizes its outputs. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>
 
+  <h2>O</h2>
+  <p><strong>One-hot vector</strong> — a vocabulary-sized vector with a single 1; makes every word orthogonal to every other, so similarity is structurally impossible. → <a href="02-embeddings/one-hot-and-why-it-fails.html">One-Hot &amp; Why It Fails</a></p>
+  <p><strong>Overfitting</strong> — memorizing training data instead of learning patterns; visible as train loss falling while validation loss rises. → <a href="03-neural-nets/gradient-descent-training-loop.html">The Training Loop</a></p>
+
   <h2>P</h2>
+  <p><strong>Precision / recall / F1</strong> — "when I flag, am I right?" / "do I find them all?" / their strict harmonic mean. The measurement kit for imbalanced problems. → <a href="03-neural-nets/measuring-models.html">Measuring Models</a></p>
   <p><strong>Parameter</strong> — one learned number inside a model. "7B model" = seven billion of these. → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
 
   <h2>S</h2>
+  <p><strong>Skip-gram</strong> — word2vec's flavor where the center word predicts its context words via two embedding matrices and a dot product. → <a href="02-embeddings/word2vec-skip-gram.html">word2vec: Skip-Gram Internals</a></p>
+  <p><strong>Softmax</strong> — exponentiate-and-normalize: logits → probabilities; temperature is a divisor inside it. → <a href="03-neural-nets/softmax-and-cross-entropy.html">Softmax &amp; Cross-Entropy</a></p>
+  <p><strong>Static vs contextual embeddings</strong> — one fixed vector per word (word2vec) vs a fresh vector per word per sentence (BERT/MiniLM); the "bank" problem is the divide. → <a href="02-embeddings/embedding-properties-and-limits.html">Properties &amp; Limits</a></p>
   <p><strong>Similarity matrix</strong> — every pairwise cosine at once (E·Eᵀ): diagonal of 1s, symmetric, topic clusters visible as blocks. The same grid shape underlies attention (M5) and contrastive training (M9). → <a href="01-math/dot-product-similarity.html">Dot Product = Similarity</a></p>
 
+  <h2>T</h2>
+  <p><strong>Temperature</strong> — a divisor applied to logits before softmax: low = sharp/deterministic, high = flat/creative. The API parameter, demystified. → <a href="03-neural-nets/softmax-and-cross-entropy.html">Softmax &amp; Cross-Entropy</a></p>
+
   <h2>V</h2>
+  <p><strong>Vanishing gradient</strong> — blame decaying to nothing through long products of small local slopes; the disease that residual connections cure. → <a href="03-neural-nets/backprop-intuition.html">Backpropagation, Intuitively</a></p>
   <p><strong>Vector</strong> — an ordered list of numbers; equivalently a point or an arrow in space. The universal currency of ML. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>
 
 </main>

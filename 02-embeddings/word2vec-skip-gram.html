@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>word2vec: Skip-Gram Internals — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="02-embeddings/word2vec-skip-gram">
+<main id="content">
+
+  <h1>word2vec: Skip-Gram Internals</h1>
+
+  <p>
+    You've said "I know word2vec conceptually" — it turns words into vectors, similar
+    words end up close. This page replaces <em>conceptually</em> with <em>mechanically</em>.
+    By the end you'll know exactly what the training data is (spoiler: it's free), what
+    the model is (two matrices — that's all), and what one training step physically does.
+    Nothing here is beyond M1 math.
+  </p>
+
+  <h2>Step 1: free training data from a sliding window</h2>
+
+  <p>
+    word2vec's genius move is <strong>self-supervision</strong>: instead of needing
+    labeled data, it invents a prediction game whose answers are already in the text.
+    The game: <em>given a word, predict its neighbors.</em> Slide a window over every
+    sentence ever written; each (center word, context word) pair is one training example.
+  </p>
+
+  <figure class="anim" id="fig-window">
+    <div class="fig-title">Animation · The sliding window harvests pairs</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-win-t">
+      <title id="fig-win-t">A window sliding over a sentence emitting center-context pairs</title>
+      <!-- sentence -->
+      <g class="mono">
+        <text id="w1" x="60"  y="80" text-anchor="middle" font-size="20" class="sv-ink">the</text>
+        <text id="w2" x="150" y="80" text-anchor="middle" font-size="20" class="sv-ink">cat</text>
+        <text id="w3" x="240" y="80" text-anchor="middle" font-size="20" class="sv-ink">sat</text>
+        <text id="w4" x="330" y="80" text-anchor="middle" font-size="20" class="sv-ink">on</text>
+        <text id="w5" x="420" y="80" text-anchor="middle" font-size="20" class="sv-ink">the</text>
+        <text id="w6" x="510" y="80" text-anchor="middle" font-size="20" class="sv-ink">mat</text>
+      </g>
+      <!-- window box positions -->
+      <g id="win-a">
+        <rect x="20" y="52" width="310" height="44" rx="10" fill="none" stroke="#2563eb" stroke-width="3"/>
+        <text x="150" y="36" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">window (±2), center = cat</text>
+      </g>
+      <g id="win-b" class="sp-hide">
+        <rect x="110" y="52" width="310" height="44" rx="10" fill="none" stroke="#2563eb" stroke-width="3"/>
+        <text x="240" y="36" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">center = sat</text>
+      </g>
+      <!-- pairs harvested -->
+      <g id="pairs-a" class="sp-hide">
+        <rect x="40" y="130" width="264" height="118" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="172" y="158" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">pairs from "cat":</text>
+        <text x="172" y="186" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">(cat, the)  (cat, sat)</text>
+        <text x="172" y="212" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">(cat, on)</text>
+        <text x="172" y="238" text-anchor="middle" font-size="17" fill="#64748b">no labels — text labels itself</text>
+      </g>
+      <g id="pairs-b" class="sp-hide">
+        <rect x="330" y="130" width="290" height="118" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="475" y="158" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">pairs from "sat":</text>
+        <text x="475" y="186" text-anchor="middle" font-size="17" class="mono" fill="#b45309">(sat, the) (sat, cat)</text>
+        <text x="475" y="212" text-anchor="middle" font-size="17" class="mono" fill="#b45309">(sat, on) (sat, the)</text>
+      </g>
+      <g id="lbl-scale" class="sp-hide">
+        <rect x="40" y="278" width="580" height="94" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="330" y="308" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">Run this over 100 billion words of text</text>
+        <text x="330" y="336" text-anchor="middle" font-size="17" fill="#64748b">→ hundreds of billions of (center, context) examples,</text>
+        <text x="330" y="360" text-anchor="middle" font-size="17" fill="#64748b">harvested from raw text at zero labeling cost.</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-win-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-window svg",
+        caption: "#fig-win-cap",
+        steps: [
+          { caption: "A window sits over the sentence, centered on <b>cat</b>, spanning 2 words each side." },
+          { caption: "Harvest: every neighbor becomes a pair with the center. Three training examples, no human involved.", show: ["#pairs-a"] },
+          { caption: "Slide one word right — center is now <b>sat</b> — and harvest again.", show: ["#win-b", "#pairs-b"], hide: ["#win-a"] },
+          { caption: "Do this over all text in existence. The dataset is effectively infinite and free — that's why this works.", show: ["#lbl-scale"], holdMs: 5200 }
+        ]
+      });
+    });
+  </script>
+
+  <p>
+    Why does predicting neighbors teach meaning? Because of last page's distributional
+    hypothesis: <em>cat</em> and <em>kitten</em> occur near the same neighbors (purr, fur,
+    vet, sat). To predict those shared neighbors well, the model is forced to give
+    <em>cat</em> and <em>kitten</em> similar vectors. Similar contexts → similar
+    prediction targets → similar vectors. The geometry of meaning falls out as a
+    side effect of winning the game.
+  </p>
+
+  <h2>Step 2: the model — two matrices, nothing else</h2>
+
+  <p>
+    The entire word2vec "network" is two matrices (M1.3 pays off here):
+  </p>
+  <ul>
+    <li><strong>V</strong> (center embeddings): |vocab| × 300 — row <em>i</em> is word <em>i</em>'s vector when it plays the center role.</li>
+    <li><strong>U</strong> (context embeddings): |vocab| × 300 — row <em>j</em> is word <em>j</em>'s vector when it plays the context role.</li>
+  </ul>
+  <p>
+    A forward pass for the pair (cat, sat): look up cat's row in V, dot it with sat's row
+    in U, convert the score to a probability. That's it — one lookup, one dot product.
+    (The "lookup" is officially a one-hot times the matrix — which just selects a row.
+    Even one-hot found a job: it's the index card, not the meaning.)
+  </p>
+
+  <div class="formula">
+    <div class="math">score(center, context) = v<sub>center</sub> · u<sub>context</sub></div>
+    <div class="plain">
+      <b>In plain words:</b> "how strongly does the model currently believe these two
+      co-occur?" — measured by the M1.2 agreement score between their two vectors.
+      Train the matrices so real pairs score high, and closeness-in-space =
+      shares-contexts = similar-meaning becomes literally true.
+    </div>
+  </div>
+
+  <figure class="anim" id="fig-net">
+    <div class="fig-title">Animation · One training pair flows through</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-net-t">
+      <title id="fig-net-t">Lookup, dot product, probability, and nudge for one pair</title>
+      <!-- V matrix -->
+      <g id="matV">
+        <rect x="30" y="60" width="150" height="150" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="105" y="46" text-anchor="middle" font-size="18" fill="#1d4ed8" font-weight="700">V (center vecs)</text>
+        <rect id="rowV" x="38" y="118" width="134" height="26" rx="5" fill="#2563eb"/>
+        <text x="105" y="137" text-anchor="middle" font-size="17" fill="#fff" class="mono">row "cat"</text>
+      </g>
+      <!-- U matrix -->
+      <g id="matU">
+        <rect x="30" y="240" width="150" height="150" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="105" y="230" text-anchor="middle" font-size="18" fill="#b45309" font-weight="700">U (context vecs)</text>
+        <rect id="rowU" x="38" y="296" width="134" height="26" rx="5" fill="#d97706"/>
+        <text x="105" y="315" text-anchor="middle" font-size="17" fill="#fff" class="mono">row "sat"</text>
+      </g>
+      <!-- dot product node -->
+      <g id="dotnode" class="sp-hide">
+        <line x1="182" y1="131" x2="300" y2="212" stroke="#94a3b8" stroke-width="2.5"/>
+        <line x1="182" y1="309" x2="300" y2="238" stroke="#94a3b8" stroke-width="2.5"/>
+        <circle cx="330" cy="225" r="34" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2.5"/>
+        <text x="330" y="233" text-anchor="middle" font-size="20" class="sv-ink" font-weight="700">·</text>
+        <text x="330" y="282" text-anchor="middle" font-size="17" fill="#64748b">dot product</text>
+      </g>
+      <g id="score" class="sp-hide">
+        <line x1="366" y1="225" x2="440" y2="225" stroke="#94a3b8" stroke-width="2.5"/>
+        <rect x="444" y="196" width="172" height="58" rx="10" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="530" y="221" text-anchor="middle" font-size="17" fill="#047857" class="mono">score = 2.1</text>
+        <text id="prob-txt" x="530" y="244" text-anchor="middle" font-size="17" fill="#047857" class="mono">P ≈ 0.89 ✓</text>
+      </g>
+      <g id="nudge" class="sp-hide">
+        <rect x="230" y="322" width="386" height="62" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="423" y="348" text-anchor="middle" font-size="17" fill="#1d4ed8">real pair scored low? → M1.4 gradient step:</text>
+        <text x="423" y="372" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">pull the two rows a little closer. Repeat 10¹¹ times.</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-net-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-net svg",
+        caption: "#fig-net-cap",
+        steps: [
+          { caption: "The whole model: matrix V and matrix U. Training pair (cat, sat) arrives. Look up cat's row in V, sat's row in U." },
+          { caption: "Dot the two 300-D vectors — M1.2's agreement score, nothing fancier.", show: ["#dotnode"] },
+          { caption: "Squash the score into a probability: 'the model believes cat and sat co-occur with P ≈ 0.89.'", show: ["#score"] },
+          { caption: "Compare with reality (they DID co-occur), compute the loss, and nudge <b>both rows</b> downhill so next time scores a bit higher. That nudge, repeated over ~100B pairs, is the entire training.", show: ["#nudge"], holdMs: 5400 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Skip-gram vs CBOW (the two flavors)</h2>
+
+  <p>
+    Everything above is <strong>skip-gram</strong>: center predicts context. The mirror
+    version, <strong>CBOW</strong> (continuous bag of words), averages the context
+    vectors and predicts the center. CBOW trains faster (one prediction per window
+    instead of several); skip-gram squeezes more signal out of rare words (each rare
+    center gets several training examples per appearance, and no averaging dilutes it).
+    Practical rule everyone quotes: <strong>skip-gram for quality, CBOW for speed</strong> —
+    and skip-gram with the next page's trick is the configuration that made word2vec famous.
+  </p>
+
+  <h2>What the trained matrix actually is</h2>
+
+  <p>
+    After training, matrix U is usually discarded, and <strong>V — the center-embedding
+    matrix — is "the word vectors"</strong>. When you loaded pretrained word2vec or GloVe
+    vectors back in the day, you were loading exactly this: one matrix, one learned row
+    per word. The famous king−man+woman geometry from M1.1 lives in these rows — nobody
+    designed it in; it condensed out of billions of tiny pull-closer nudges.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      The classic Google News word2vec release (2013): vocabulary <strong>3 million</strong>
+      words and phrases × <strong>300</strong> dimensions, trained with skip-gram on
+      <strong>~100 billion words</strong>. That's a 3M × 300 matrix ≈ <strong>900M
+      parameters</strong> — bigger than BERT (110M)! But it's a shallow lookup table, not a
+      deep network: enormous memory, almost zero computation. Deep models flipped that
+      trade: fewer parameters doing far more compute per token. Keep this contrast — it
+      returns in M7 when we count FLOPs vs bytes.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Look again at what training did: <em>pull vectors of things that belong together
+      closer; the geometry becomes meaning.</em> Now recall what your RAG stack assumes:
+      question vectors land near answer-chunk vectors. Same principle, bigger units —
+      all-MiniLM (M9) was trained by pulling <em>sentence</em> pairs together the exact
+      way word2vec pulls <em>word</em> pairs together. You are two pages away from
+      understanding the training objective (negative sampling) that both share. Also:
+      the "embedding table" you just met never went away — it's literally the first layer
+      of every transformer, including GPT-4's (M5.2).
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: train word2vec yourself, inspect the space</div>
+<pre><code># pip install gensim
+from gensim.models import Word2Vec
+from gensim.utils import simple_preprocess
+
+# any text you like — a book from Project Gutenberg, your docs, chat exports
+sentences = [simple_preprocess(line) for line in open("corpus.txt", encoding="utf-8")]
+
+model = Word2Vec(
+    sentences,
+    vector_size=100,   # dimensions
+    window=5,          # the sliding window's reach
+    sg=1,              # 1 = skip-gram, 0 = CBOW  ← you know what this means now
+    negative=10,       # next page's trick
+    min_count=5,
+    epochs=10,
+)
+
+print(model.wv.most_similar("king", topn=8))
+print(model.wv.most_similar(positive=["king", "woman"], negative=["man"]))  # the analogy
+print(model.wv["king"][:10])   # 10 of the 100 learned numbers — your own embedding
+</code></pre>
+    <p>
+      Two experiments worth the time: (1) train on a tiny corpus vs a big one and watch
+      neighbor quality change — data volume <em>is</em> the quality knob; (2) try
+      <code>window=2</code> vs <code>window=10</code>: small windows learn syntactic
+      neighbors (cat↔cats), big windows learn topical ones (cat↔veterinarian). You're
+      tuning the definition of "context" and watching meaning shift with it.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    word2vec = a self-made prediction game (guess the neighbors) + two matrices + M1's
+    dot product and gradient descent. Meaning is never taught; it <strong>precipitates</strong>
+    out of billions of co-occurrence nudges. "I know word2vec conceptually" has now become:
+    lookup → dot → probability → nudge. That's the whole machine.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Explain skip-gram's training objective in one paragraph.</summary>
+      <div><p>For each word in a corpus, take its surrounding words within a window. Train embeddings so the dot product between a center word's vector and each true context word's vector yields a high co-occurrence probability, updating both vectors by gradient descent when predictions are wrong. Words sharing contexts converge to nearby vectors — the distributional hypothesis made mechanical.</p></div>
+    </details>
+    <details>
+      <summary>Why does word2vec use two embedding matrices instead of one?</summary>
+      <div><p>A word's behavior <em>as a center</em> differs from its behavior <em>as a neighbor</em> — e.g. a word rarely co-occurs with itself, which one shared matrix would struggle to express (it would push a vector away from itself). Two roles, two matrices, cleaner optimization. After training, typically only the center matrix V is kept (or the two are averaged).</p></div>
+    </details>
+    <details>
+      <summary>What does self-supervised mean, and why was word2vec a landmark example?</summary>
+      <div><p>The supervision signal is manufactured from the input itself — here, neighboring words are the "labels" — so no human annotation is needed and the dataset scales to all text ever written. word2vec was an early proof that self-supervision on raw text learns real semantics; masked-LM (BERT) and next-token prediction (GPT) are the same idea with deeper models. In a real sense modern LLM pretraining is word2vec's game, scaled up.</p></div>
+    </details>
+    <details>
+      <summary>Skip-gram vs CBOW — differences and when to prefer each?</summary>
+      <div><p>Skip-gram: center predicts each context word — slower (multiple predictions per window) but stronger on rare words and small datasets. CBOW: averaged context predicts center — faster, slightly better for frequent words. Default answer: skip-gram + negative sampling for quality; CBOW when training speed on a huge corpus dominates.</p></div>
+    </details>
+    <details>
+      <summary>How does the window size hyperparameter change what's learned?</summary>
+      <div><p>Small windows (2–3) capture syntactic/functional similarity — words swappable in-place (walk/walking, cat/cats). Large windows (10+) capture topical relatedness — words from the same scene (doctor/hospital/nurse). Neither is "correct"; it defines what counts as context, i.e., what kind of similarity your space encodes. Good interviewers love this question because it shows whether you understand that embeddings reflect their training choices.</p></div>
+    </details>
+    <details>
+      <summary>Where do word2vec-style embedding tables appear inside modern transformers?</summary>
+      <div><p>As the input embedding layer: a |vocab| × d matrix whose rows are looked up by token id — structurally identical to word2vec's V. Differences: it's trained jointly with the whole network (not as a standalone objective), operates on subword tokens, and its outputs get transformed by attention into contextual representations. In MiniLM that table is ~11.7M of the 22.7M parameters.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>One-Hot &amp; Why It Fails — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="02-embeddings/one-hot-and-why-it-fails">
+<main id="content">
+
+  <h1>One-Hot &amp; Why It Fails</h1>
+
+  <p>
+    This module answers a question you've carried for years: <strong>how does a machine
+    learn what words mean?</strong> You already know the pre-embedding world — bag-of-words,
+    TF-IDF, counting. This page shows precisely where that world hits its ceiling,
+    because the failure is what makes word2vec's fix (next page) feel inevitable instead
+    of magical.
+  </p>
+
+  <h2>From counting to coordinates</h2>
+
+  <p>
+    Your TF-IDF experience already treats text as vectors: one dimension per vocabulary
+    word, values from counts. Push that idea to its purest form and you get the
+    <strong>one-hot vector</strong>: to represent a single word, take a vector as long as
+    the whole vocabulary, put a 1 in that word's slot, 0 everywhere else. It's the
+    representation lurking underneath every count-based method — each document vector in
+    bag-of-words is just a sum of one-hots.
+  </p>
+
+  <figure class="anim" id="fig-onehot">
+    <div class="fig-title">Animation · One word = one hot slot</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-oh-t">
+      <title id="fig-oh-t">Words mapped to one-hot vectors over a vocabulary</title>
+      <!-- vocabulary strip -->
+      <g id="vocab">
+        <text x="20" y="46" font-size="18" class="sv-ink" font-weight="700">vocabulary (5 words):</text>
+        <text x="255" y="46" font-size="18" fill="#64748b">cat · dog · pizza · runs · the</text>
+      </g>
+      <!-- cat row -->
+      <g id="row-cat">
+        <text x="20" y="112" font-size="19" fill="#1d4ed8" font-weight="700">cat →</text>
+        <g class="mono">
+          <rect x="110" y="86" width="72" height="40" rx="8" fill="#2563eb"/><text x="146" y="112" text-anchor="middle" font-size="19" fill="#fff">1</text>
+          <rect x="190" y="86" width="72" height="40" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="226" y="112" text-anchor="middle" font-size="19" fill="#94a3b8">0</text>
+          <rect x="270" y="86" width="72" height="40" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="306" y="112" text-anchor="middle" font-size="19" fill="#94a3b8">0</text>
+          <rect x="350" y="86" width="72" height="40" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="386" y="112" text-anchor="middle" font-size="19" fill="#94a3b8">0</text>
+          <rect x="430" y="86" width="72" height="40" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="466" y="112" text-anchor="middle" font-size="19" fill="#94a3b8">0</text>
+        </g>
+      </g>
+      <!-- dog row -->
+      <g id="row-dog" class="sp-hide">
+        <text x="20" y="176" font-size="19" fill="#b45309" font-weight="700">dog →</text>
+        <g class="mono">
+          <rect x="110" y="150" width="72" height="40" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="146" y="176" text-anchor="middle" font-size="19" fill="#94a3b8">0</text>
+          <rect x="190" y="150" width="72" height="40" rx="8" fill="#d97706"/><text x="226" y="176" text-anchor="middle" font-size="19" fill="#fff">1</text>
+          <rect x="270" y="150" width="72" height="40" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="306" y="176" text-anchor="middle" font-size="19" fill="#94a3b8">0</text>
+          <rect x="350" y="150" width="72" height="40" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="386" y="176" text-anchor="middle" font-size="19" fill="#94a3b8">0</text>
+          <rect x="430" y="150" width="72" height="40" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="466" y="176" text-anchor="middle" font-size="19" fill="#94a3b8">0</text>
+        </g>
+      </g>
+      <!-- dot product row -->
+      <g id="row-dot" class="sp-hide">
+        <rect x="20" y="222" width="600" height="52" rx="10" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="320" y="255" text-anchor="middle" font-size="19" class="mono" fill="#b91c1c">cat · dog = 1×0 + 0×1 + 0 + 0 + 0 = 0</text>
+      </g>
+      <g id="row-verdict" class="sp-hide">
+        <text x="320" y="310" text-anchor="middle" font-size="19" fill="#b91c1c" font-weight="700">similarity(cat, dog) = 0 — total strangers</text>
+        <text x="320" y="342" text-anchor="middle" font-size="18" fill="#64748b">and similarity(cat, pizza) = 0 too. Every pair. Always.</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-oh-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-onehot svg",
+        caption: "#fig-oh-cap",
+        steps: [
+          { caption: "A 5-word vocabulary. Each word gets one slot. <b>cat</b> = a 1 in the cat slot, zeros elsewhere." },
+          { caption: "<b>dog</b> gets its own slot. Note the two vectors share no non-zero position — by construction, they never can.", show: ["#row-dog"] },
+          { caption: "Now use last module's tool: the dot product. Every multiplication pairs a 1 with a 0.", show: ["#row-dot"] },
+          { caption: "Result: <b>zero similarity between cat and dog</b> — and between every other pair of words. The representation is blind to meaning by design.", show: ["#row-verdict"], holdMs: 5200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The two fatal flaws</h2>
+
+  <p>
+    <strong>Flaw 1 — size.</strong> One dimension per word means real vocabularies produce
+    absurd vectors: 50,000 words → 50,000-dimensional vectors that are 99.998% zeros.
+    Everything downstream (storage, multiplication, learning) pays for dimensions that
+    almost never activate.
+  </p>
+  <p>
+    <strong>Flaw 2 — orthogonality (the deep one).</strong> Every pair of one-hot vectors
+    has dot product 0. In M1's language: all words are mutually perpendicular arrows —
+    <em>cat</em> is exactly as unrelated to <em>dog</em> as it is to <em>pizza</em>. The
+    representation cannot express "these two words are similar" <em>at all</em>. There is
+    no geometry of meaning; there's just an arbitrary filing cabinet. This is why your
+    TF-IDF search engine can't tell that "CEO resigned" matches "chief executive stepped
+    down": at the word level, zero overlap means zero score.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      A 50,000-word vocabulary: each one-hot vector stored naively as float32 is
+      50,000 × 4 bytes = <strong>200 KB per word</strong>. A word2vec-style dense vector:
+      300 × 4 bytes = <strong>1.2 KB</strong> — 167× smaller, while carrying vastly
+      <em>more</em> information about meaning. (In practice one-hots are stored sparsely,
+      but the moment they enter a neural layer they become dense — the cost is real.)
+      The efficiency gap is nice; the meaning gap is the revolution.
+    </p>
+  </div>
+
+  <h2>The idea that fixes it: "you shall know a word by the company it keeps"</h2>
+
+  <p>
+    Linguist J.R. Firth wrote that line in 1957, and it became the
+    <strong>distributional hypothesis</strong>: words that appear in similar contexts have
+    similar meanings. You never see a definition of <em>tezgüino</em>, but read
+    "a bottle of tezgüino", "tezgüino makes you drunk", "we brewed tezgüino from corn" —
+    and you know it's an alcoholic drink. The contexts <em>are</em> the meaning.
+  </p>
+  <p>
+    This is the crucial pivot, because context is <strong>countable from raw text</strong>.
+    No dictionary, no labels, no human annotation — just a mountain of sentences, which
+    the internet supplies for free. If similar contexts ⇒ similar meaning, then a
+    representation built <em>from</em> contexts will place similar words close together.
+    That's exactly the "rule of the space" from M1, derived from a 1957 insight.
+  </p>
+
+  <h2>What we actually want</h2>
+
+  <p>Stating the target precisely — because next page's algorithm is engineered to hit each point:</p>
+  <ul>
+    <li><strong>Dense:</strong> most slots non-zero, every dimension doing work — not 99.998% zeros.</li>
+    <li><strong>Low-dimensional:</strong> 100–1000 dims, not vocabulary-sized. Forces the model to compress, and compression forces generalization.</li>
+    <li><strong>Similarity-preserving:</strong> cos(cat, dog) high, cos(cat, pizza) low — geometry that mirrors meaning.</li>
+    <li><strong>Learned from raw text:</strong> no labels, so it scales to billions of words.</li>
+  </ul>
+
+  <figure class="anim" id="fig-dense">
+    <div class="fig-title">Animation · From filing cabinet to meaning space</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-de-t">
+      <title id="fig-de-t">Orthogonal one-hot axes versus a dense meaning space with clusters</title>
+      <!-- left: filing cabinet -->
+      <g id="cab">
+        <rect x="24" y="40" width="270" height="270" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="159" y="70" text-anchor="middle" font-size="18" fill="#64748b" font-weight="700">one-hot world</text>
+        <line x1="70" y1="270" x2="250" y2="270" stroke="#94a3b8" stroke-width="2.5"/>
+        <line x1="70" y1="270" x2="70" y2="100" stroke="#94a3b8" stroke-width="2.5"/>
+        <line x1="70" y1="270" x2="196" y2="180" stroke="#94a3b8" stroke-width="2.5"/>
+        <text x="256" y="290" font-size="17" fill="#1d4ed8">cat</text>
+        <text x="52" y="92" font-size="17" fill="#b45309">dog</text>
+        <text x="202" y="172" font-size="17" fill="#059669">pizza</text>
+        <text x="159" y="330" text-anchor="middle" font-size="17" fill="#b91c1c">every word: its own axis, all ⊥</text>
+      </g>
+      <!-- right: meaning space -->
+      <g id="space" class="sp-hide">
+        <rect x="330" y="40" width="290" height="270" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="475" y="70" text-anchor="middle" font-size="18" fill="#64748b" font-weight="700">dense embedding world</text>
+        <circle cx="420" cy="140" r="7" class="sv-a"/><text x="420" y="122" text-anchor="middle" font-size="17" fill="#1d4ed8">cat</text>
+        <circle cx="460" cy="168" r="7" class="sv-a"/><text x="466" y="192" text-anchor="middle" font-size="17" fill="#1d4ed8">dog</text>
+        <circle cx="560" cy="250" r="7" class="sv-b"/><text x="560" y="276" text-anchor="middle" font-size="17" fill="#b45309">pizza</text>
+        <ellipse cx="440" cy="152" rx="62" ry="44" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="6 5"/>
+      </g>
+      <g id="arrow-mid" class="sp-hide">
+        <text x="312" y="185" text-anchor="middle" font-size="24" fill="#059669" font-weight="700">→</text>
+      </g>
+      <g id="lbl-how" class="sp-hide">
+        <rect x="330" y="318" width="290" height="34" rx="9" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="475" y="341" text-anchor="middle" font-size="17" fill="#047857">how? next page: word2vec</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-de-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-dense svg",
+        caption: "#fig-de-cap",
+        steps: [
+          { caption: "The one-hot world: every word is its own perpendicular axis. No word is ever 'near' another — nearness doesn't exist here." },
+          { caption: "What we want instead: a shared low-dimensional space where <b>position is learned from context</b>, so cat and dog end up neighbors.", show: ["#space", "#arrow-mid"] },
+          { caption: "The machine that performs this move — filing cabinet in, meaning space out — is word2vec. Next page opens it up.", show: ["#lbl-how"], holdMs: 5000 }
+        ]
+      });
+    });
+  </script>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Every limitation you ever hit with TF-IDF search — synonyms scoring zero, plural vs
+      singular mismatches, "no results" for a perfectly reasonable rephrasing — was Flaw 2
+      wearing different costumes. And notice something about your own career arc: you moved
+      from TF-IDF to calling all-MiniLM without ever seeing what happens in between.
+      This module is that in-between. By its end, "dense retrieval" vs "sparse retrieval"
+      (terms you'll meet in every RAG article) will read as: geometry-of-meaning vs
+      filing-cabinet — and you'll know hybrid search (M12) combines them because each
+      catches what the other misses.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: watch one-hot fail, in four lines</div>
+<pre><code>import numpy as np
+
+vocab = ["cat", "dog", "pizza", "runs", "the"]
+onehots = np.eye(len(vocab))          # identity matrix = all one-hots (M1 callback!)
+
+# every pairwise similarity:
+print(onehots @ onehots.T)
+# → the identity matrix again: 1s on the diagonal, 0 everywhere else.
+#   Translation: every word matches itself and nothing else.
+</code></pre>
+    <p>
+      Note the neat coincidence: the matrix of all one-hot vectors <em>is</em> M1's
+      identity matrix, and its similarity matrix is also the identity — the "no structure"
+      matrix. Compare that with the blocky similarity matrix you computed for real
+      sentences in M1.2: those blocks are exactly what one-hot can never produce.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    One-hot representations make every word <strong>perpendicular to every other</strong> —
+    similarity is structurally impossible, not just unmeasured. The escape route is the
+    distributional hypothesis: meaning lives in context, context is countable, and
+    counting it lets geometry replace the filing cabinet.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>What's the difference between one-hot encoding and an embedding?</summary>
+      <div><p>One-hot: a sparse, vocabulary-sized vector with a single 1 — hand-assigned, carries only identity, all pairs orthogonal (similarity always 0). Embedding: a dense, low-dimensional, <em>learned</em> vector positioned so that semantically similar items are geometrically close. One-hot says "which word"; an embedding says "what it means relative to everything else."</p></div>
+    </details>
+    <details>
+      <summary>Why is the orthogonality of one-hot vectors a problem for NLP?</summary>
+      <div><p>Because it hard-codes the assumption that all words are equally unrelated. Any model consuming one-hots must learn everything about word relationships from scratch for each word separately — knowledge about "cat" transfers zero to "kitten". Embeddings let related words share statistical strength, which is why they massively improved sample efficiency across all of NLP.</p></div>
+    </details>
+    <details>
+      <summary>State the distributional hypothesis and explain why it matters practically.</summary>
+      <div><p>"Words occurring in similar contexts have similar meanings." Practically, it converts meaning — an unlabeled, subjective thing — into co-occurrence statistics that can be computed from unlimited raw text with no human labeling. It's the theoretical license for word2vec, BERT's masked-word pretraining, and ultimately GPT-style next-token prediction: all of them learn meaning purely from context.</p></div>
+    </details>
+    <details>
+      <summary>Is TF-IDF completely obsolete then?</summary>
+      <div><p>No — and saying so in an interview is a mistake. TF-IDF/BM25 (sparse retrieval) is exact about rare tokens: IDs, error codes, product SKUs, names — precisely where embeddings are weakest (they smooth everything toward meaning). Modern search often runs hybrid: sparse for exact-term precision, dense for semantic recall, scores fused. Knowing <em>when</em> counting beats geometry is a senior-engineer signal.</p></div>
+    </details>
+    <details>
+      <summary>Word embeddings are ~300-D, one-hots are ~50,000-D. Why does shrinking dimensions add information?</summary>
+      <div><p>The compression is the teacher. With only 300 dimensions for 50k words, the model <em>cannot</em> give every word private space — it's forced to share dimensions, and the only efficient sharing is putting similar words in similar regions. Information about relationships gets created because identity-only storage no longer fits. (Same principle returns in autoencoders and in why LLM hidden sizes matter, M7.)</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

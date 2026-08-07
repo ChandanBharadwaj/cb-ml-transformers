@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build: A Tiny Classifier — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="03-neural-nets/build-a-tiny-classifier">
+<main id="content">
+
+  <h1>Build: A Tiny Classifier</h1>
+
+  <p>
+    Capstone time. This page has less prose and more <em>you</em>: a sentiment classifier
+    built three ways — your old world (TF-IDF + logistic regression), a numpy network
+    where every line maps to a page of this module, and the same network in PyTorch to
+    see what the framework abstracts. One dataset, three models, honest measurement.
+    This is the module's knowledge, load-bearing.
+  </p>
+
+  <h2>What training looks like, before you run it</h2>
+
+  <figure class="anim" id="fig-boundary">
+    <div class="fig-title">Animation · A decision boundary learns its shape</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-bd-t">
+      <title id="fig-bd-t">A decision boundary bending across training epochs</title>
+      <rect x="20" y="20" width="600" height="320" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+      <!-- data points: blue cluster with an island, orange around -->
+      <g id="pts">
+        <circle cx="180" cy="120" r="7" class="sv-a"/><circle cx="230" cy="90" r="7" class="sv-a"/><circle cx="150" cy="180" r="7" class="sv-a"/>
+        <circle cx="250" cy="150" r="7" class="sv-a"/><circle cx="200" cy="220" r="7" class="sv-a"/><circle cx="300" cy="110" r="7" class="sv-a"/>
+        <circle cx="470" cy="240" r="7" class="sv-b"/><circle cx="520" cy="180" r="7" class="sv-b"/><circle cx="430" cy="290" r="7" class="sv-b"/>
+        <circle cx="540" cy="260" r="7" class="sv-b"/><circle cx="480" cy="120" r="7" class="sv-b"/><circle cx="380" cy="270" r="7" class="sv-b"/>
+        <circle cx="350" cy="200" r="7" class="sv-b"/>
+      </g>
+      <!-- epoch 0 line: random -->
+      <g id="ep0">
+        <line x1="80" y1="60" x2="560" y2="300" stroke="#dc2626" stroke-width="3.5"/>
+        <text id="ep-lbl" x="320" y="368" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">epoch 0: random weights — boundary is nonsense</text>
+      </g>
+      <!-- epoch 5: roughly separating -->
+      <g id="ep5" class="sp-hide">
+        <line x1="240" y1="330" x2="450" y2="40" stroke="#d97706" stroke-width="3.5"/>
+      </g>
+      <!-- epoch 30: curved -->
+      <g id="ep30" class="sp-hide">
+        <path d="M 300 330 C 320 240, 300 160, 350 120 C 390 90, 430 80, 460 40" fill="none" stroke="#059669" stroke-width="4"/>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-bd-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-boundary svg",
+        caption: "#fig-bd-cap",
+        steps: [
+          { caption: "Epoch 0: random weights draw a nonsense boundary. Loss is high — cross-entropy is screaming — and every scream is a gradient." },
+          { caption: "Epoch 5: the loop (forward → loss → backward → step) has dragged the boundary into roughly the right orientation. Most points now classified correctly.",
+            show: ["#ep5"], hide: ["#ep0"], attrs: { "#ep-lbl": { textContent: "epoch 5: roughly right — the easy gains" } } },
+          { caption: "Epoch 30: the bends (3.1!) let the boundary CURVE around the stragglers a straight line can't reach. This curvature is exactly what 'depth + nonlinearity' buys.",
+            show: ["#ep30"], hide: ["#ep5"], attrs: { "#ep-lbl": { textContent: "epoch 30: curved boundary — the bends at work" } }, holdMs: 5400 },
+          { caption: "Keep training past this and the boundary starts wrapping around individual noise points — overfitting, live. The 3.3 validation curve is what catches it. Now build it for real, below.",
+            attrs: { "#ep-lbl": { textContent: "beyond: boundary chases noise = overfitting" } }, holdMs: 5200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Round 1: your old world, as the baseline</h2>
+
+  <div class="build callout">
+    <div class="co-head">Build 1 · TF-IDF + logistic regression (the bar to beat)</div>
+<pre><code># pip install scikit-learn datasets
+from datasets import load_dataset
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report
+
+ds = load_dataset("rotten_tomatoes")          # 8.5k train / 1k test movie reviews
+Xtr_txt, ytr = ds["train"]["text"], ds["train"]["label"]
+Xte_txt, yte = ds["test"]["text"],  ds["test"]["label"]
+
+vec = TfidfVectorizer(max_features=20000, ngram_range=(1, 2))
+Xtr = vec.fit_transform(Xtr_txt)              # fit ONLY on train — leakage rule, 3.3!
+Xte = vec.transform(Xte_txt)
+
+clf = LogisticRegression(max_iter=1000).fit(Xtr, ytr)
+print(classification_report(yte, clf.predict(Xte), digits=3))
+# expect ≈ 0.76–0.78 F1. This is the honest baseline (3.6) — write it down.
+</code></pre>
+    <p>
+      Note what you just did with new eyes: logistic regression <em>is</em> a single
+      neuron with a sigmoid (3.1's last interview question), trained with the 3.3 loop
+      by sklearn behind the scenes. Your "old world" was a one-neuron network all along.
+    </p>
+  </div>
+
+  <h2>Round 2: the numpy network — every line is a page you've read</h2>
+
+  <div class="build callout">
+    <div class="co-head">Build 2 · Two-layer network from scratch</div>
+<pre><code>import numpy as np
+rng = np.random.default_rng(0)
+
+# reuse Xtr, Xte, ytr, yte from Build 1 (TF-IDF features as network input)
+Xtr_d, Xte_d = Xtr.toarray().astype(np.float32), Xte.toarray().astype(np.float32)
+ytr_a, yte_a = np.array(ytr), np.array(yte)
+
+D, H = Xtr_d.shape[1], 64                     # input dim, hidden width (3.1)
+W1 = rng.normal(0, np.sqrt(2/D), (D, H)); b1 = np.zeros(H)   # He init (3.4!)
+W2 = rng.normal(0, np.sqrt(2/H), (H, 1));  b2 = np.zeros(1)
+
+relu    = lambda z: np.maximum(0, z)                       # the bend      (3.1)
+sigmoid = lambda z: 1 / (1 + np.exp(-z))                   # output squash (3.2)
+
+lr, batch, steps = 0.05, 64, 1200
+for step in range(steps + 1):
+    i  = rng.integers(0, len(Xtr_d), batch)                # mini-batch    (3.3)
+    x, y = Xtr_d[i], ytr_a[i][:, None]
+
+    h  = relu(x @ W1 + b1)                                 # forward L1    (3.1)
+    p  = sigmoid(h @ W2 + b2)                              # forward L2
+
+    # backward — blame flows in reverse                     (3.4)
+    d2 = (p - y) / batch                                   # the (p−y) gradient (3.2)
+    gW2, gb2 = h.T @ d2, d2.sum(0)
+    d1 = (d2 @ W2.T) * (h > 0)                             # ReLU's local slope: 1 or 0
+    gW1, gb1 = x.T @ d1, d1.sum(0)
+
+    for P, G in [(W1,gW1),(b1,gb1),(W2,gW2),(b2,gb2)]:     # step          (M1.4)
+        P -= lr * G
+
+    if step % 300 == 0:
+        pt = sigmoid(relu(Xte_d @ W1 + b1) @ W2 + b2).ravel()
+        acc = ((pt > 0.5) == yte_a).mean()
+        loss = -np.mean(y*np.log(p+1e-9) + (1-y)*np.log(1-p+1e-9))
+        print(f"step {step:4d}  train-loss {loss:.3f}  test-acc {acc:.3f}")
+</code></pre>
+    <p>
+      Every comment cites its page. Expect test accuracy ≈ 0.76–0.78 — <strong>about the
+      same as logistic regression</strong>. That's not failure; that's a lesson (below).
+    </p>
+  </div>
+
+  <h2>Round 3: the same network in PyTorch</h2>
+
+  <div class="build callout">
+    <div class="co-head">Build 3 · Concepts → framework, line by line</div>
+<pre><code>import torch, torch.nn as nn
+
+Xtr_t = torch.tensor(Xtr_d); ytr_t = torch.tensor(ytr_a, dtype=torch.float32)[:, None]
+Xte_t = torch.tensor(Xte_d); yte_t = torch.tensor(yte_a, dtype=torch.float32)[:, None]
+
+model = nn.Sequential(                    # the layer stack        (3.1)
+    nn.Linear(Xtr_t.shape[1], 64), nn.ReLU(),
+    nn.Dropout(0.3),                      # regularization         (3.5)
+    nn.Linear(64, 1),
+)
+opt     = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0.01)  # (3.5)
+loss_fn = nn.BCEWithLogitsLoss()          # sigmoid + cross-entropy fused    (3.2)
+
+for step in range(1201):
+    i = torch.randint(0, len(Xtr_t), (64,))
+    model.train()
+    loss = loss_fn(model(Xtr_t[i]), ytr_t[i])   # ① forward + ② loss
+    opt.zero_grad(); loss.backward()            # ③ backward         (3.4)
+    opt.step()                                  # ④ step             (3.5's AdamW)
+    if step % 300 == 0:
+        model.eval()                            # dropout OFF for eval (3.5!)
+        with torch.no_grad():
+            acc = ((model(Xte_t) > 0) == yte_t.bool()).float().mean()
+        print(f"step {step:4d}  loss {loss.item():.3f}  test-acc {acc:.3f}")
+</code></pre>
+    <p>
+      Diff against Build 2: the forward stack replaces your matrices,
+      <code>loss.backward()</code> replaces eleven lines of hand-derived blame,
+      AdamW replaces vanilla steps, and dropout/weight-decay arrive as keywords.
+      <strong>Nothing conceptually new happened</strong> — that's the point. The
+      framework is your Module 3, industrialized.
+    </p>
+  </div>
+
+  <h2>The punchline about features (bridge to Module 4)</h2>
+
+  <p>
+    All three models score within a point or two of each other. The neural net's extra
+    capacity bought almost nothing — because <strong>TF-IDF features have already thrown
+    away what depth could use</strong>: word order ("not good at all, just great
+    marketing" vs "not great at all, just good marketing" — identical bags), synonyms
+    (M2.1's orthogonality), and context (M2.4's bank problem). A deeper stack of bends
+    can't recover information the representation destroyed.
+  </p>
+  <p>
+    Now run the fourth experiment — swap the representation:
+  </p>
+
+  <div class="build callout">
+    <div class="co-head">Build 4 · Same classifier, MiniLM features</div>
+<pre><code>from sentence_transformers import SentenceTransformer
+enc = SentenceTransformer("all-MiniLM-L6-v2")
+
+Etr = enc.encode(Xtr_txt, normalize_embeddings=True, show_progress_bar=True)
+Ete = enc.encode(Xte_txt, normalize_embeddings=True)
+
+clf2 = LogisticRegression(max_iter=1000).fit(Etr, ytr)
+print(classification_report(yte, clf2.predict(Ete), digits=3))
+# expect ≈ 0.80–0.83 F1 — beating BOTH previous models,
+# with a plain logistic regression on top. The representation did the work.
+</code></pre>
+    <p>
+      Same one-neuron classifier as Build 1; only the features changed — from counting
+      words to 384 dimensions of contextual meaning. <strong>The lesson of the whole
+      module: past a modest point, representation beats architecture.</strong> Which
+      raises the real question: what machine computes representations that good?
+      That machine is Modules 4–5. You're ready for it.
+    </p>
+  </div>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers: expected scoreboard</div>
+    <p>
+      On rotten_tomatoes (results vary ±1–2 points by seed):
+      majority baseline <strong>0.50</strong> ·
+      TF-IDF + LR <strong>≈ 0.77</strong> ·
+      TF-IDF + 2-layer net <strong>≈ 0.77</strong> ·
+      MiniLM + LR <strong>≈ 0.82</strong> ·
+      (for reference, a fine-tuned DistilBERT — the M8.2 capstone — reaches
+      <strong>≈ 0.85+</strong>). Read the gaps: features 0.50→0.77, representation
+      0.77→0.82, task-specific fine-tuning 0.82→0.85. That ordering of wins is a general
+      law worth carrying into every project.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      You just performed, in miniature, the 2013→2020 history of NLP: counting features
+      (pre-2013) → shallow nets on counted features (barely better) → pretrained
+      representations carrying a cheap classifier (the BERT era's actual workflow).
+      And you used MiniLM as a <em>feature extractor</em> for classification — a
+      genuinely useful production pattern (fast, no GPU fine-tuning, surprisingly
+      strong) that you can deploy tomorrow, not just a course exercise.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    You built the full stack with your own hands: features → layers → loss → backprop →
+    optimizer → honest metrics against baselines. And the scoreboard taught the module's
+    final lesson: <strong>what you feed a model matters more than how deep you stack
+    it</strong> — which is exactly why the next two modules are about the machine that
+    makes the world's best features.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Why did the 2-layer network barely beat logistic regression on TF-IDF features?</summary>
+      <div><p>Because TF-IDF is a linear-friendly, information-lossy representation: word order, negation scope and synonymy are already destroyed, and what remains (weighted word presence) is largely linearly separable. Extra layers can only recombine surviving information, not resurrect discarded structure. Depth pays when the input retains rich structure (raw tokens, embeddings, pixels) — hence transformers operate on token sequences, not bags.</p></div>
+    </details>
+    <details>
+      <summary>Using a frozen embedding model + light classifier vs fine-tuning the full model — trade-offs?</summary>
+      <div><p>Frozen features (what Build 4 did): minutes to train, no GPU needed, one shared encoder can serve many tasks, no risk of catastrophic forgetting; ceiling limited by how well generic embeddings fit your task. Full fine-tuning: adapts the representation itself — typically a few points better (0.82→0.85 here) — but costs GPU time, per-task model copies, and careful hyperparameters. Standard progression: start frozen, fine-tune only if the gap matters (M8.1 formalizes this).</p></div>
+    </details>
+    <details>
+      <summary>Why must dropout behave differently at train vs eval time, and where did that appear in the code?</summary>
+      <div><p>Dropout is training-time noise for regularization; at inference you want the deterministic full network (an implicit average of trained sub-networks). Frameworks switch via <code>model.train()</code> / <code>model.eval()</code> — Build 3 calls both. Forgetting <code>eval()</code> leaves dropout on in production: noisy, degraded predictions that "work in the notebook" — a genuinely common bug.</p></div>
+    </details>
+    <details>
+      <summary>What is BCEWithLogitsLoss and why prefer it over sigmoid followed by BCELoss?</summary>
+      <div><p>It fuses the sigmoid and binary cross-entropy into one numerically-stable operation (using the log-sum-exp trick internally), avoiding the overflow/underflow of computing log(sigmoid(z)) at extreme logits — the same stability issue as 3.2's <code>z -= z.max()</code>. Practical rule: give losses raw logits, let the loss own the squashing; the fused pattern (also softmax+CE in <code>CrossEntropyLoss</code>) is standard.</p></div>
+    </details>
+    <details>
+      <summary>You improved F1 from 0.77 to 0.82. An interviewer asks how you'd verify it's a real improvement.</summary>
+      <div><p>(1) Multiple seeds/splits — is the gap stable beyond run-to-run variance (±1–2 points here)? (2) Same test set, untouched during development, for both models. (3) Per-class metrics — did a minority class fund the gain? (4) Significance/bootstrap on the test set if the decision matters. (5) Cost check — is +5 F1 worth the added inference latency? The habit of interrogating your own improvement is the actual answer being tested.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

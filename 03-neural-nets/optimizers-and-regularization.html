@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Optimizers &amp; Regularization — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="03-neural-nets/optimizers-and-regularization">
+<main id="content">
+
+  <h1>Optimizers &amp; Regularization</h1>
+
+  <p>
+    Raw gradient descent works, but nobody ships it. Every real config you'll ever read
+    says <code>AdamW</code>, has a <code>warmup</code>, a <code>weight_decay</code>, and
+    somewhere a <code>dropout</code>. This page explains all four so that training
+    configs stop containing magic words — and gives you the two-line answers interviews
+    expect for each.
+  </p>
+
+  <h2>From SGD to Adam: smarter downhill</h2>
+
+  <p>
+    <strong>SGD</strong> is M1.4 verbatim: step against the current batch's gradient.
+    Its weakness: in narrow valleys, batch noise makes it zig-zag across the walls
+    instead of walking along the floor.
+    <strong>Momentum</strong> fixes this with physics — keep a running average of recent
+    gradients (a "velocity") and step along <em>that</em>. Zig-zag components cancel
+    across batches; the consistent downhill component accumulates. A heavy ball instead
+    of a drunk hiker.
+  </p>
+  <p>
+    <strong>Adam</strong> adds a second trick: a <em>per-parameter</em> step size. It
+    tracks each parameter's typical gradient magnitude and divides by it — parameters
+    with tiny, rare gradients (an embedding row for a rare word) get boosted; ones with
+    huge gradients get damped. Momentum + per-parameter scaling = fast, forgiving, the
+    default everywhere. <strong>AdamW</strong> is Adam with weight decay done correctly
+    (decoupled from the gradient math) — when in doubt, the answer is AdamW.
+  </p>
+
+  <figure class="anim" id="fig-race">
+    <div class="fig-title">Animation · Three optimizers, same valley</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-r-t">
+      <title id="fig-r-t">SGD zig-zags, momentum smooths, Adam adapts per direction</title>
+      <!-- narrow valley contours -->
+      <g id="valley">
+        <ellipse cx="330" cy="190" rx="290" ry="105" fill="none" stroke="#e2e8f0" stroke-width="2"/>
+        <ellipse cx="330" cy="190" rx="215" ry="70" fill="none" stroke="#dbe4ee" stroke-width="2"/>
+        <ellipse cx="330" cy="190" rx="140" ry="42" fill="none" stroke="#cbd5e1" stroke-width="2"/>
+        <ellipse cx="330" cy="190" rx="66" ry="18" fill="none" stroke="#94a3b8" stroke-width="2"/>
+        <circle cx="330" cy="190" r="6" fill="#059669"/>
+        <text x="330" y="170" text-anchor="middle" font-size="17" fill="#047857" font-weight="650">minimum</text>
+        <text x="330" y="52" text-anchor="middle" font-size="17" fill="#94a3b8">a narrow valley: steep walls, gentle floor</text>
+      </g>
+      <!-- SGD path: zigzag -->
+      <g id="path-sgd" class="sp-hide">
+        <path d="M 60 110 L 105 265 L 148 122 L 190 258 L 228 132 L 262 246 L 292 150 L 316 210"
+              fill="none" stroke="#dc2626" stroke-width="3" marker-end="url(#op-r)"/>
+        <text x="92" y="94" font-size="17" fill="#dc2626" font-weight="700">SGD: zig-zags across the walls</text>
+      </g>
+      <!-- momentum path -->
+      <g id="path-mom" class="sp-hide">
+        <path d="M 60 110 C 130 220, 200 230, 268 210 C 300 200, 318 196, 328 191"
+              fill="none" stroke="#d97706" stroke-width="3.5" marker-end="url(#op-o)"/>
+        <text x="150" y="316" font-size="17" fill="#b45309" font-weight="700">momentum: averages out the zig-zag</text>
+      </g>
+      <!-- adam path -->
+      <g id="path-adam" class="sp-hide">
+        <path d="M 60 110 C 140 150, 230 178, 300 186 C 316 188, 324 189, 329 190"
+              fill="none" stroke="#2563eb" stroke-width="3.5" marker-end="url(#op-b)"/>
+        <text x="172" y="128" font-size="17" fill="#1d4ed8" font-weight="700">Adam: per-direction step sizes</text>
+      </g>
+      <defs>
+        <marker id="op-r" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#dc2626"/></marker>
+        <marker id="op-o" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#d97706"/></marker>
+        <marker id="op-b" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#2563eb"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-r-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-race svg",
+        caption: "#fig-r-cap",
+        steps: [
+          { caption: "The classic hard landscape: a valley much steeper across than along. The gradient mostly points at the opposite wall, not toward the minimum." },
+          { caption: "<b>SGD</b> obeys each noisy gradient literally — bouncing wall to wall, crawling along the floor. Progress, but wasteful.", show: ["#path-sgd"] },
+          { caption: "<b>Momentum</b> steps along a running average: the wall-to-wall bounces cancel, the along-the-floor component compounds.", show: ["#path-mom"] },
+          { caption: "<b>Adam</b> also divides each direction by its typical gradient size — shrinking the steep direction's steps, boosting the gentle one's. Nearly straight to the target. This is why it's everyone's default.", show: ["#path-adam"], holdMs: 5600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Learning-rate schedules: warmup, then decay</h2>
+
+  <p>
+    The learning rate isn't one number — it's a <strong>schedule</strong>. The
+    near-universal shape for transformers: <strong>warmup</strong> (start near zero,
+    ramp up over the first few hundred/thousand steps) then <strong>decay</strong>
+    (linear or cosine down to ~zero). Why warmup? At initialization, weights are random
+    and Adam's per-parameter statistics are garbage; full-size steps in that state can
+    shove the model into a bad region it never escapes. Warmup lets the statistics
+    stabilize before real steps begin. Why decay? Early, big steps to cross the
+    landscape; late, small steps to settle precisely into the valley floor — M1.4's
+    "bouncing" animation, prevented by design.
+  </p>
+
+  <h2>Regularization: the anti-memorization toolkit</h2>
+
+  <p>
+    3.3's diverging curves showed the disease (overfitting); here are the two standard
+    vaccines you'll actually configure:
+  </p>
+  <p>
+    <strong>Weight decay</strong> — every step, shrink all weights slightly toward zero
+    (<code>weight_decay=0.01</code> in AdamW). Effect: the model can only keep weights
+    large if the data <em>keeps insisting</em> they earn it. Memorization patterns —
+    supported by few examples — can't pay the rent; general patterns can. Occam's razor
+    as a subtraction.
+  </p>
+  <p>
+    <strong>Dropout</strong> — during training only, randomly zero a fraction (typically
+    10% in transformers) of activations each step. No neuron can rely on a specific
+    partner existing, so fragile co-adapted circuits — memorization's favorite trick —
+    can't form; features must be redundantly, robustly encoded. At inference, dropout
+    turns off entirely. (It's also a beautiful ensemble argument: each step trains a
+    random sub-network; inference averages them all.)
+  </p>
+
+  <figure class="anim" id="fig-drop">
+    <div class="fig-title">Animation · Dropout: training with random amnesia</div>
+    <svg viewBox="0 0 640 340" aria-labelledby="fig-d-t">
+      <title id="fig-d-t">Random neurons masked during different training steps</title>
+      <!-- network: 2 layers of 5 nodes -->
+      <g id="net">
+        <circle cx="180" cy="70"  r="17" fill="#2563eb"/><circle cx="180" cy="130" r="17" fill="#2563eb"/>
+        <circle cx="180" cy="190" r="17" fill="#2563eb"/><circle cx="180" cy="250" r="17" fill="#2563eb"/>
+        <circle cx="460" cy="70"  r="17" fill="#d97706"/><circle cx="460" cy="130" r="17" fill="#d97706"/>
+        <circle cx="460" cy="190" r="17" fill="#d97706"/><circle cx="460" cy="250" r="17" fill="#d97706"/>
+        <g stroke="#cbd5e1" stroke-width="1.5">
+          <line x1="197" y1="70" x2="443" y2="70"/><line x1="197" y1="70" x2="443" y2="130"/><line x1="197" y1="70" x2="443" y2="190"/><line x1="197" y1="70" x2="443" y2="250"/>
+          <line x1="197" y1="130" x2="443" y2="70"/><line x1="197" y1="130" x2="443" y2="130"/><line x1="197" y1="130" x2="443" y2="190"/><line x1="197" y1="130" x2="443" y2="250"/>
+          <line x1="197" y1="190" x2="443" y2="70"/><line x1="197" y1="190" x2="443" y2="130"/><line x1="197" y1="190" x2="443" y2="190"/><line x1="197" y1="190" x2="443" y2="250"/>
+          <line x1="197" y1="250" x2="443" y2="70"/><line x1="197" y1="250" x2="443" y2="130"/><line x1="197" y1="250" x2="443" y2="190"/><line x1="197" y1="250" x2="443" y2="250"/>
+        </g>
+      </g>
+      <!-- masks step A -->
+      <g id="mask-a" class="sp-hide">
+        <circle cx="180" cy="130" r="21" fill="#f8fafc" stroke="#dc2626" stroke-width="3" stroke-dasharray="5 4"/>
+        <circle cx="460" cy="250" r="21" fill="#f8fafc" stroke="#dc2626" stroke-width="3" stroke-dasharray="5 4"/>
+        <text id="step-lbl" x="320" y="46" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">training step 1: these two are OFF</text>
+      </g>
+      <!-- masks step B -->
+      <g id="mask-b" class="sp-hide">
+        <circle cx="180" cy="250" r="21" fill="#f8fafc" stroke="#dc2626" stroke-width="3" stroke-dasharray="5 4"/>
+        <circle cx="460" cy="70" r="21" fill="#f8fafc" stroke="#dc2626" stroke-width="3" stroke-dasharray="5 4"/>
+      </g>
+      <g id="lbl-effect" class="sp-hide">
+        <rect x="60" y="288" width="520" height="42" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="320" y="316" text-anchor="middle" font-size="17" fill="#1d4ed8">no neuron can depend on a partner → features must be robust</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-d-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-drop svg",
+        caption: "#fig-d-cap",
+        steps: [
+          { caption: "A small network, fully connected. Without dropout, neuron pairs can form fragile private codes that only work together — perfect for memorizing." },
+          { caption: "Step 1 of training: two random neurons are switched off. The rest must produce a decent answer without them.", show: ["#mask-a"] },
+          { caption: "Step 2: a DIFFERENT random pair is off. Every step, a different sub-network trains.", show: ["#mask-b"], hide: [], attrs: { "#step-lbl": { textContent: "training step 2: different two are OFF" } } },
+          { caption: "Across thousands of steps, knowledge is forced to spread redundantly. At inference all neurons return — an implicit ensemble of every sub-network trained.", show: ["#lbl-effect"], holdMs: 5400 }
+        ]
+      });
+    });
+  </script>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers: BERT's actual recipe</div>
+    <p>
+      From the BERT paper, now fully readable to you: optimizer <strong>Adam</strong>
+      (β₁=0.9, β₂=0.999 — the momentum and magnitude averaging constants),
+      LR <strong>1e-4</strong> with <strong>10,000-step warmup</strong> then linear
+      decay, <strong>weight decay 0.01</strong>, <strong>dropout 0.1</strong> on every
+      layer, batch 256 sequences, 1M steps. MiniLM inherits the same skeleton. When you
+      fine-tune in M8/M9, you'll shrink exactly two of these (LR → 2e-5, steps → a few
+      hundred) and keep the rest.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Open any Hugging Face example you've ever copy-pasted: <code>optim="adamw_torch"</code>,
+      <code>warmup_ratio=0.1</code>, <code>weight_decay=0.01</code> — three of this
+      page's four ideas, sitting in code you've already run. The fourth (dropout) is
+      inside the model config (<code>hidden_dropout_prob: 0.1</code> in MiniLM's).
+      Nothing in a training config is folklore anymore: every field is either loop
+      mechanics (3.3), an optimizer knob, a schedule, or a regularizer.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: race SGD vs momentum vs Adam yourself</div>
+<pre><code>import numpy as np
+
+# the animation's valley: steep in y, gentle in x. Minimum at (0,0).
+loss_grad = lambda p: np.array([0.2*p[0], 4.0*p[1]])   # gradient of 0.1x² + 2y²
+
+def run(kind, lr=0.09, steps=60):
+    p = np.array([-8.0, 2.5]); v = np.zeros(2); m = np.zeros(2); s = np.zeros(2)
+    for t in range(1, steps+1):
+        g = loss_grad(p)
+        if kind == "sgd":      p -= lr * g
+        elif kind == "mom":    v = 0.9*v + g; p -= lr * v
+        elif kind == "adam":
+            m = 0.9*m + 0.1*g; s = 0.999*s + 0.001*g*g
+            mh, sh = m/(1-0.9**t), s/(1-0.999**t)
+            p -= lr * mh / (np.sqrt(sh) + 1e-8)
+    return p
+
+for k in ["sgd", "mom", "adam"]:
+    print(k, "→ final position:", run(k).round(4), "(target: [0, 0])")
+</code></pre>
+    <p>
+      Adam lands closest with the same budget. Then sabotage it: raise <code>lr</code>
+      until SGD diverges and note that Adam survives much longer — its per-parameter
+      scaling is a built-in shock absorber. That robustness, more than raw speed, is why
+      it became the default.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    <strong>AdamW + warmup-then-decay + weight decay + dropout</strong> is the standard
+    kit: momentum smooths the walk, per-parameter scaling adapts it, warmup protects the
+    fragile start, decay lands the ending, and the two regularizers tax memorization.
+    You now know why each line of a training config exists — which is precisely the
+    difference between running a recipe and cooking.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Explain momentum in optimization — what problem does it solve?</summary>
+      <div><p>Plain SGD follows each mini-batch's noisy gradient, zig-zagging in ravine-shaped loss surfaces (steep across, gentle along). Momentum maintains an exponential moving average of gradients and steps along it: oscillating components cancel between batches while the consistent descent direction accumulates — faster progress and less sensitivity to noise. Physically: a ball with inertia instead of a walker who re-decides direction every step.</p></div>
+    </details>
+    <details>
+      <summary>What does Adam add over SGD+momentum, and what is AdamW?</summary>
+      <div><p>Adam keeps two running averages per parameter: the gradient (momentum, β₁) and the squared gradient (magnitude, β₂), then steps by momentum ÷ √magnitude — an individual, self-tuning learning rate per parameter. Rare-gradient parameters get amplified, jumpy ones damped. AdamW decouples weight decay from this adaptive scaling (decaying weights directly rather than through the gradient), which makes regularization behave consistently — it's the standard for transformers.</p></div>
+    </details>
+    <details>
+      <summary>Why do transformer schedules use learning-rate warmup?</summary>
+      <div><p>Early in training, weights are random and Adam's moment estimates are built from a handful of noisy samples — large steps then can catapult the model into poor regions or cause divergence (loss spikes/NaN). Warmup ramps the LR from ~0 over the first steps so statistics stabilize before full-size steps. Empirically transformers are unusually sensitive to this; skipping warmup is a classic cause of failed runs.</p></div>
+    </details>
+    <details>
+      <summary>How does weight decay reduce overfitting?</summary>
+      <div><p>It continuously shrinks weights toward zero, so only weights that the training signal repeatedly reinforces stay large. Memorization circuits — supported by one or two examples — get eroded, while broadly-supported general patterns persist. Equivalent to preferring simpler functions (smaller weights → smoother outputs); in AdamW it's applied as a direct multiplicative shrink each step.</p></div>
+    </details>
+    <details>
+      <summary>Dropout: how does it work at train vs inference time, and why does it help?</summary>
+      <div><p>Training: each step, zero each activation independently with probability p (and rescale survivors by 1/(1−p) so expected magnitudes match). Inference: disabled entirely — deterministic full network. It helps by preventing co-adaptation (no feature can rely on a specific partner) and by implicitly ensembling the exponentially many sub-networks trained across steps. Watch for it as the classic reason a model behaves differently in <code>model.train()</code> vs <code>model.eval()</code> mode — a real production bug source.</p></div>
+    </details>
+    <details>
+      <summary>Your loss spikes to NaN mid-training. Give a diagnostic checklist.</summary>
+      <div><p>(1) Learning rate too high or no warmup — the most common. (2) Exploding gradients — add gradient clipping (standard: clip global norm to 1.0). (3) Numerical issues: fp16 overflow (use bf16 or loss scaling, M7.3), a log(0)/division by zero in custom loss code. (4) Bad batch: corrupted data, extreme outlier, empty sequence. (5) Adam epsilon/beta misconfiguration. Ordered this way, you fix 90% of NaN incidents at step 1 or 2.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>
