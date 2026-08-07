@@ -34,3 +34,5 @@ python3 -m http.server 8000
 ```
 
 (Opening files directly via `file://` also works — scripts are plain, no modules.)
+
+<!-- Pages enabled: 2026-08-07T16:56Z -->
