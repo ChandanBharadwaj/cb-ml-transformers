@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>From Tokens to a Sentence Vector — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="09-sentence-embeddings/from-tokens-to-a-sentence-vector">
+<main id="content">
+
+  <h1>From Tokens to a Sentence Vector</h1>
+
+  <p>
+    Loop-closer module #1 begins. Five pages from now, "all-MiniLM-L6-v2" will be a
+    tool you understand down to its training data — and you'll have fine-tuned it on
+    your own RAG corpus. First problem: a transformer encoder outputs <strong>one
+    vector per token</strong> (M5.6), but your vector DB stores <strong>one vector per
+    text</strong>. This page is about that collapse — and why doing it naively on raw
+    BERT produces embeddings so bad they're famous for it.
+  </p>
+
+  <h2>The collapse: three pooling strategies</h2>
+
+  <p>
+    Given n token vectors, three standard ways to make one: <strong>CLS pooling</strong>
+    — take the [CLS] token's vector (M6.2: it's positioned to be a summary… if it was
+    trained to be); <strong>mean pooling</strong> — average all token vectors (every
+    token votes; what all-MiniLM uses); <strong>max pooling</strong> — take the
+    per-dimension maximum (feature detectors: "did ANY token light this dimension?").
+    Mean pooling wins in practice for similarity models, with one important detail:
+    padding tokens are masked out of the average (they're packaging, not content).
+  </p>
+
+  <figure class="anim" id="fig-pool">
+    <div class="fig-title">Animation · Three ways to collapse a sentence</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-po-t">
+      <title id="fig-po-t">CLS, mean and max pooling over token vectors</title>
+      <!-- token vectors -->
+      <g id="toks9" class="mono">
+        <rect x="40"  y="50" width="90" height="44" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/><text x="85"  y="78" text-anchor="middle" font-size="17" class="sv-ink">[CLS]</text>
+        <rect x="145" y="50" width="90" height="44" rx="9" fill="#dbeafe" stroke="#93c5fd"/><text x="190" y="78" text-anchor="middle" font-size="17" fill="#1d4ed8">the</text>
+        <rect x="250" y="50" width="90" height="44" rx="9" fill="#dbeafe" stroke="#93c5fd"/><text x="295" y="78" text-anchor="middle" font-size="17" fill="#1d4ed8">coffee</text>
+        <rect x="355" y="50" width="90" height="44" rx="9" fill="#dbeafe" stroke="#93c5fd"/><text x="400" y="78" text-anchor="middle" font-size="17" fill="#1d4ed8">was</text>
+        <rect x="460" y="50" width="90" height="44" rx="9" fill="#dbeafe" stroke="#93c5fd"/><text x="505" y="78" text-anchor="middle" font-size="17" fill="#1d4ed8">great</text>
+        <text x="320" y="30" text-anchor="middle" font-size="17" fill="#64748b">encoder output: one 384-d vector per token (M5.6)</text>
+      </g>
+      <!-- CLS route -->
+      <g id="route-cls" class="sp-hide">
+        <path d="M 85 98 C 85 160, 130 190, 175 200" fill="none" stroke="#94a3b8" stroke-width="3" marker-end="url(#pl-a)"/>
+        <rect x="180" y="180" width="150" height="42" rx="10" fill="#f1f5f9" stroke="#94a3b8"/>
+        <text x="255" y="207" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">CLS: take one</text>
+      </g>
+      <!-- mean route -->
+      <g id="route-mean" class="sp-hide">
+        <path d="M 190 98 L 300 258 M 295 98 L 305 254 M 400 98 L 312 256 M 505 98 L 320 260" stroke="#059669" stroke-width="2" fill="none" opacity="0.6"/>
+        <rect x="230" y="262" width="170" height="42" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+        <text x="315" y="289" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">MEAN: average all</text>
+        <text x="315" y="322" text-anchor="middle" font-size="17" fill="#047857">← all-MiniLM's choice</text>
+      </g>
+      <!-- max route -->
+      <g id="route-max" class="sp-hide">
+        <rect x="440" y="180" width="170" height="42" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="525" y="207" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">MAX: per-dim peak</text>
+      </g>
+      <g id="final9" class="sp-hide">
+        <rect x="180" y="352" width="280" height="42" rx="10" fill="#2563eb"/>
+        <text x="320" y="379" text-anchor="middle" font-size="17" fill="#fff" class="mono" font-weight="700">one 384-d sentence vector</text>
+      </g>
+      <defs>
+        <marker id="pl-a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#94a3b8"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-po-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-pool svg",
+        caption: "#fig-po-cap",
+        steps: [
+          { caption: "The encoder hands you five contextual vectors — one per token, [CLS] included. Your vector DB wants exactly one." },
+          { caption: "Option 1 — CLS pooling: trust the summary token. Works IF training taught [CLS] to summarize (fine-tuned classifiers: yes; raw BERT for similarity: no — M6.2's caveat).", show: ["#route-cls"], holdMs: 5800 },
+          { caption: "Option 2 — mean pooling: every real token votes equally; padding is masked out. Robust, simple, and what your embedding model actually does.", show: ["#route-mean"] },
+          { caption: "Option 3 — max pooling: per-dimension 'did anything fire?' — occasionally useful, mostly historical for sentences.", show: ["#route-max"] },
+          { caption: "Out comes the 384 numbers you've shipped to production a million times. But WHICH pooling matters far less than the next section's problem: what space those vectors live in.", show: ["#final9"], holdMs: 5800 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The anisotropy scandal: raw BERT is a terrible embedder</h2>
+
+  <p>
+    Here's the fact that surprises everyone: take vanilla BERT, mean-pool it, and
+    compute cosine similarities — <strong>everything scores 0.85–0.99 with everything
+    else</strong>. "The cat sat on the mat" vs "Quarterly revenue declined": ~0.92.
+    The reason is geometric: MLM training packs token vectors into a narrow
+    <strong>cone</strong> of the 384-dim space (dominated by frequency information),
+    rather than spreading them over the sphere. Inside a cone, all directions agree —
+    cosine (M1.2's direction-agreement) becomes nearly useless. This is
+    <em>anisotropy</em>, and it's why "just use BERT for search" failed for years:
+    the model understands sentences perfectly well, but its raw geometry doesn't
+    <em>expose</em> that understanding to a dot product.
+  </p>
+
+  <figure class="anim" id="fig-cone">
+    <div class="fig-title">Animation · The cone problem, and the fix's preview</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-cn-t">
+      <title id="fig-cn-t">Anisotropic cone of raw BERT embeddings versus spread contrastive space</title>
+      <!-- left: cone -->
+      <g id="cone-side">
+        <rect x="24" y="30" width="290" height="290" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="169" y="58" text-anchor="middle" font-size="17" fill="#64748b" font-weight="700">raw BERT + mean pooling</text>
+        <path d="M 70 300 L 190 80 L 280 260 Z" fill="#fee2e2" opacity="0.5"/>
+        <line x1="70" y1="300" x2="185" y2="95" stroke="#dc2626" stroke-width="2.5"/>
+        <line x1="70" y1="300" x2="230" y2="130" stroke="#dc2626" stroke-width="2.5"/>
+        <line x1="70" y1="300" x2="262" y2="220" stroke="#dc2626" stroke-width="2.5"/>
+        <text x="169" y="290" text-anchor="middle" font-size="17" fill="#b91c1c">every sentence in one cone</text>
+        <text x="169" y="314" text-anchor="middle" font-size="17" fill="#b91c1c">all cosines ≈ 0.9 — useless</text>
+      </g>
+      <!-- right: spread -->
+      <g id="spread-side" class="sp-hide">
+        <rect x="326" y="30" width="290" height="290" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="471" y="58" text-anchor="middle" font-size="17" fill="#64748b" font-weight="700">after contrastive tuning (9.3)</text>
+        <line x1="471" y1="190" x2="560" y2="90" stroke="#059669" stroke-width="2.5"/>
+        <line x1="471" y1="190" x2="590" y2="230" stroke="#059669" stroke-width="2.5"/>
+        <line x1="471" y1="190" x2="420" y2="80" stroke="#059669" stroke-width="2.5"/>
+        <line x1="471" y1="190" x2="360" y2="260" stroke="#059669" stroke-width="2.5"/>
+        <line x1="471" y1="190" x2="530" y2="300" stroke="#059669" stroke-width="2.5"/>
+        <text x="471" y="290" text-anchor="middle" font-size="17" fill="#047857">directions spread over the sphere</text>
+        <text x="471" y="314" text-anchor="middle" font-size="17" fill="#047857">cosine becomes meaningful</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-cn-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-cone svg",
+        caption: "#fig-cn-cap",
+        steps: [
+          { caption: "Raw BERT's sentence vectors huddle in a narrow cone — an artifact of the MLM objective, which never needed cosine to mean anything. Inside the cone, everything points roughly the same way." },
+          { caption: "The fix is NOT a better pooling formula — it's retraining the geometry itself: pull similar sentences together, push different ones apart, until the space spreads and cosine carries meaning. That training is pages 9.2–9.3, and it's word2vec's physics (M2.3) at sentence scale — exactly as promised.", show: ["#spread-side"], holdMs: 7000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Reading modules.json: the pipeline you've been importing</h2>
+
+  <p>
+    Open all-MiniLM-L6-v2's repo and beside config.json (M5.6) sits
+    <code>modules.json</code> — the sentence-transformers pipeline definition, now
+    fully readable to you:
+  </p>
+
+<pre><code>[
+  { "type": "sentence_transformers.models.Transformer" },  // the M5.6 encoder, 6 blocks
+  { "type": "sentence_transformers.models.Pooling" },      // THIS PAGE: mean pooling
+  { "type": "sentence_transformers.models.Normalize" }     // M1.1: unit length, so
+]                                                          // dot product = cosine (M1.2)
+</code></pre>
+
+  <p>
+    Three stages, three course callbacks. <code>model.encode()</code> = tokenize (5.1)
+    → 6 encoder blocks (5.6) → masked mean pool (this page) → normalize (1.1).
+    The black box's lid is fully off; what remains is how its weights were
+    <em>trained</em> to make that pipeline produce meaningful geometry.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Measured on 500 random unrelated sentence pairs: raw BERT-base + mean pooling
+      gives mean cosine <strong>0.87</strong> (min 0.71!) — the cone, quantified.
+      all-MiniLM-L6-v2 on the same pairs: mean <strong>0.11</strong>. Related pairs:
+      raw BERT 0.94 (indistinguishable from unrelated!), MiniLM <strong>0.68</strong> —
+      a usable signal gap at one-quarter the size of BERT. Geometry, not scale,
+      is what made your vector DB work.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Two production facts land here: (1) <code>normalize_embeddings=True</code> —
+      you now know it's the third pipeline stage, and why it lets your DB use plain
+      dot products (M1.2's unit-vector equivalence). (2) Why you can't swap in any
+      HF encoder as an embedder — a model card saying "BERT-based" promises
+      understanding, not usable geometry; only similarity-trained models (the
+      sentence-transformers family, bge, e5…) have had their cone fixed. That
+      instinct will save you a bad architecture decision someday.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: witness the cone yourself</div>
+<pre><code>import torch
+from transformers import AutoTokenizer, AutoModel
+from sentence_transformers import SentenceTransformer, util
+
+sents = ["The cat sat on the mat.",
+         "Quarterly revenue declined sharply.",
+         "A feline rested on the rug.",
+         "My password reset email never arrived."]
+
+# raw BERT + mean pooling (the naive recipe)
+tok = AutoTokenizer.from_pretrained("bert-base-uncased")
+bert = AutoModel.from_pretrained("bert-base-uncased")
+enc = tok(sents, padding=True, return_tensors="pt")
+with torch.no_grad():
+    out = bert(**enc).last_hidden_state              # (4, n, 768)
+mask = enc.attention_mask.unsqueeze(-1)               # mask the padding!
+raw = (out * mask).sum(1) / mask.sum(1)               # masked mean pooling
+print("RAW BERT:\n", util.cos_sim(raw, raw).round(decimals=2))
+
+# the fixed geometry
+mini = SentenceTransformer("all-MiniLM-L6-v2")
+E = mini.encode(sents, normalize_embeddings=True)
+print("MiniLM:\n", util.cos_sim(E, E).round(decimals=2))
+</code></pre>
+    <p>
+      Raw BERT: everything ≈ 0.8–0.95, cat≈revenue — the cone in numbers. MiniLM:
+      cat↔feline high, everything else low — the M1.2 similarity matrix behaving as
+      the course promised. Same architecture family; the difference is entirely the
+      next two pages.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Sentence vector = <strong>masked mean pooling + normalization</strong> over the
+    encoder's token vectors — but pooling is the easy 10%. Raw MLM models are
+    <strong>anisotropic</strong>: their vectors huddle in a cone where cosine says
+    nothing. Usable embedding geometry has to be <em>trained in</em> — which is
+    exactly where this module goes next.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Compare CLS, mean, and max pooling — and which should you use?</summary>
+      <div><p>CLS: use the summary token's vector — meaningful only if training gave [CLS] that role (fine-tuned classifiers yes, raw MLM models no). Mean: masked average of all token vectors — robust default, used by all-MiniLM and most sentence embedders. Max: per-dimension maximum — feature-presence detector, rarely best for sentences. Practical answer: use whatever the model was TRAINED with (check modules.json) — pooling and training are coupled; swapping pooling post-hoc degrades a tuned model.</p></div>
+    </details>
+    <details>
+      <summary>Why does raw BERT produce poor sentence embeddings despite understanding language well?</summary>
+      <div><p>Anisotropy: MLM training packs representations into a narrow cone (partly frequency-driven), so all sentence vectors share direction and cosine similarities are uniformly high — the geometry doesn't expose the model's understanding to a dot product. Understanding lives in the representations' fine structure; similarity search needs it in their COARSE geometry. Fixing it requires similarity-oriented training (contrastive, 9.3), not better pooling — the key insight behind sentence-transformers.</p></div>
+    </details>
+    <details>
+      <summary>Why is padding masked out of mean pooling, and what bug does forgetting cause?</summary>
+      <div><p>Batching pads short texts to the batch max length with padding tokens; unmasked, their vectors dilute the average — and the SAME text embeds differently depending on its batchmates' lengths (padding count changes). Symptom: non-deterministic similarities across batch compositions — maddening to debug. The attention-mask-weighted average (as in the build) is the correct masked mean; sentence-transformers does it internally.</p></div>
+    </details>
+    <details>
+      <summary>Why normalize embeddings before storing them in a vector DB?</summary>
+      <div><p>Unit-length vectors make dot product, cosine, and Euclidean ranking equivalent (M1.2), letting the DB use the cheapest metric with no behavior change; scores land in a fixed [-1,1] range for stable thresholds; and mixed-length artifacts disappear. It's stage 3 of MiniLM's own pipeline — if you normalize at query time, ensure the index was built normalized too (mismatch silently breaks rankings).</p></div>
+    </details>
+    <details>
+      <summary>A teammate proposes using your fine-tuned BERT classifier's [CLS] vectors for semantic search. Assess.</summary>
+      <div><p>Likely poor: that [CLS] was trained to be linearly separable for CLASS boundaries, not to place semantically similar texts near each other — texts of the same class cluster, but within-class and cross-class similarity structure is uncontrolled (plus anisotropy remnants). It might accidentally work for class-shaped queries and fail for everything else. Right tool: a contrastively-trained embedder (MiniLM/bge), optionally fine-tuned on domain pairs (9.5). Good answer-shape: distinguish 'trained for separation' from 'trained for similarity geometry'.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

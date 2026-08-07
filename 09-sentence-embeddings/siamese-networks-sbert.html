@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Siamese Networks &amp; SBERT — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="09-sentence-embeddings/siamese-networks-sbert">
+<main id="content">
+
+  <h1>Siamese Networks &amp; SBERT</h1>
+
+  <p>
+    2019. BERT dominates every benchmark — including sentence-pair similarity, where
+    you feed it <em>both sentences at once</em> and it classifies their relationship
+    brilliantly. So why did anyone need sentence-BERT? Because of an arithmetic
+    catastrophe hiding in that "both at once" — one that makes BERT-style comparison
+    <strong>architecturally incompatible with search</strong>. This page is that
+    catastrophe, the twin-tower fix, and the reason your RAG system can pre-embed
+    documents at all.
+  </p>
+
+  <h2>The catastrophe: pair-wise reading doesn't scale</h2>
+
+  <p>
+    BERT's native similarity mode is the <strong>cross-encoder</strong>: concatenate
+    <code>[CLS] sentence A [SEP] sentence B [SEP]</code>, run the full encoder, let
+    attention compare every word of A against every word of B (M5.3's machinery at
+    its best), output one relationship score. Maximally accurate — and the score
+    exists only for <em>that pair</em>. Nothing reusable is produced. Now count what
+    search needs: your query against 1M chunks = <strong>1M full encoder passes per
+    query</strong>. Clustering 10k sentences = 50M passes. The accuracy is perfect;
+    the economics are impossible.
+  </p>
+
+  <figure class="anim" id="fig-towers">
+    <div class="fig-title">Animation · Cross-encoder vs the twin towers</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-tw-t">
+      <title id="fig-tw-t">Cross-encoder joint reading versus bi-encoder separate embedding</title>
+      <!-- cross encoder -->
+      <g id="cross9">
+        <rect x="30" y="40" width="270" height="150" rx="14" fill="#fee2e2" stroke="#fca5a5" stroke-width="2"/>
+        <text x="165" y="68" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">cross-encoder</text>
+        <rect x="55" y="84" width="220" height="40" rx="9" fill="#fff" stroke="#fca5a5"/>
+        <text x="165" y="110" text-anchor="middle" font-size="17" class="mono" fill="#b91c1c">[A + B together]</text>
+        <text x="165" y="150" text-anchor="middle" font-size="17" fill="#b91c1c">full attention across both</text>
+        <text x="165" y="174" text-anchor="middle" font-size="17" fill="#b91c1c">→ one score, nothing stored</text>
+      </g>
+      <!-- bi encoder -->
+      <g id="bi9" class="sp-hide">
+        <rect x="340" y="40" width="270" height="150" rx="14" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+        <text x="475" y="68" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">bi-encoder (siamese towers)</text>
+        <rect x="360" y="84" width="110" height="40" rx="9" fill="#fff" stroke="#6ee7b7"/>
+        <text x="415" y="110" text-anchor="middle" font-size="17" class="mono" fill="#047857">A → vec</text>
+        <rect x="480" y="84" width="110" height="40" rx="9" fill="#fff" stroke="#6ee7b7"/>
+        <text x="535" y="110" text-anchor="middle" font-size="17" class="mono" fill="#047857">B → vec</text>
+        <text x="475" y="150" text-anchor="middle" font-size="17" fill="#047857">SAME weights, separate passes</text>
+        <text x="475" y="174" text-anchor="middle" font-size="17" fill="#047857">→ reusable vectors, cosine</text>
+      </g>
+      <!-- the search math -->
+      <g id="math9" class="sp-hide">
+        <rect x="30" y="220" width="580" height="84" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="248" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">search 1M chunks, one query:</text>
+        <text x="320" y="274" text-anchor="middle" font-size="17" fill="#b91c1c" class="mono">cross: 1,000,000 encoder passes ≈ hours</text>
+        <text x="320" y="298" text-anchor="middle" font-size="17" fill="#047857" class="mono">bi: 1 encoder pass + 1M dot products ≈ 50 ms</text>
+      </g>
+      <g id="precompute" class="sp-hide">
+        <rect x="30" y="330" width="580" height="66" rx="12" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="320" y="356" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">the unlock: chunk vectors are computed ONCE, offline, stored in your DB</text>
+        <text x="320" y="382" text-anchor="middle" font-size="17" fill="#1d4ed8">this sentence IS the architectural foundation of RAG</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-tw-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-towers svg",
+        caption: "#fig-tw-cap",
+        steps: [
+          { caption: "The cross-encoder: both texts enter TOGETHER; every word attends to every word across the pair. Maximum accuracy — and the output is one disposable score." },
+          { caption: "SBERT's move: two copies of the encoder sharing identical weights — 'siamese' towers. Each text is embedded ALONE into the same space; comparison is just cosine (M1.2).", show: ["#bi9"] },
+          { caption: "The arithmetic that decided everything: per query, cross needs a million full passes; bi needs ONE pass plus a million dot products — your M1.2 build's exact loop.", show: ["#math9"], holdMs: 6200 },
+          { caption: "And because each text embeds independently, document vectors are precomputable — indexed once, searched forever. Every vector DB, every RAG pipeline, your entire retrieval layer exists inside this one architectural property.", show: ["#precompute"], holdMs: 6600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The trade, stated honestly</h2>
+
+  <p>
+    The bi-encoder pays for its speed: each text is embedded <strong>blind</strong> to
+    what it'll be compared against, so subtle query-document interactions (negation
+    alignment, which entity matches which) are compressed into 384 numbers <em>before
+    the question is known</em>. Cross-encoders, reading pairs jointly, catch what
+    pre-compression loses — typically worth several accuracy points on ranking
+    benchmarks. The production resolution you already sense coming:
+    <strong>use both</strong> — bi-encoder recalls candidates from millions, cross-encoder
+    re-scores the top 50 (reranking, M12.2). Cheap wide net, expensive fine net.
+  </p>
+
+  <h2>Symmetric vs asymmetric: a detail that bites RAG builders</h2>
+
+  <p>
+    One subtlety with direct production impact: what counts as "similar" depends on the
+    task. <strong>Symmetric</strong> search matches like with like (duplicate
+    questions, paraphrases). <strong>Asymmetric</strong> search matches a short query
+    against a long answer-bearing passage — "how do I reset my password?" should land
+    near a paragraph that never contains those words but <em>answers</em> them.
+    Models are trained for one or the other (all-MiniLM: general/symmetric-leaning
+    from its pair diet; e5/bge: asymmetric-aware, using prefixes like
+    <code>"query: …"</code> / <code>"passage: …"</code> to tell the towers which role
+    a text plays). Using a symmetric model for question→document retrieval — or
+    forgetting a prefix-trained model's prefixes — quietly costs recall. Check the
+    model card; it's a one-line fix.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      The SBERT paper's headline: clustering 10,000 sentences needed
+      <strong>~65 hours</strong> of cross-encoder BERT passes vs
+      <strong>~5 seconds</strong> with siamese embeddings + cosine — a 46,000×
+      speedup that created the sentence-embedding field. The accuracy trade today:
+      on retrieval benchmarks, a MiniLM-class bi-encoder alone gets ~85–90% of the
+      ranking quality of a cross-encoder over the same corpus; the two-stage combo
+      (M12.2) recovers nearly all of it at ~1% of the cost.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Read your own RAG pipeline against this page: index-time <code>encode()</code>
+      over your corpus = the right tower, run offline; query-time <code>encode()</code>
+      = the left tower; your vector DB's top-k = the dot-product sweep. You built a
+      siamese architecture without the name. And M4.4's promise — "attention is RAG
+      inside a sentence" — now closes from the other side: your RAG is a bi-encoder
+      approximation of cross-attention, with the reranker (M12.2) buying back what
+      the approximation loses. One mechanism, three zoom levels.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: measure the trade yourself</div>
+<pre><code>import time
+from sentence_transformers import SentenceTransformer, CrossEncoder, util
+
+docs = ["To reset your password, open Settings and choose Security.",
+        "Our refund policy allows returns within 30 days.",
+        "The API rate limit is 100 requests per minute.",
+        "Two-factor authentication adds a second login step."] * 250  # 1,000 docs
+query = "I forgot my login credentials"
+
+bi = SentenceTransformer("all-MiniLM-L6-v2")
+cross = CrossEncoder("cross-encoder/ms-marco-MiniLM-L6-v2")
+
+t0 = time.perf_counter()
+D = bi.encode(docs, normalize_embeddings=True)          # offline in real life!
+q = bi.encode([query], normalize_embeddings=True)
+bi_scores = (D @ q.T).ravel()
+t_bi = time.perf_counter() - t0
+
+t0 = time.perf_counter()
+cross_scores = cross.predict([(query, d) for d in docs])
+t_cross = time.perf_counter() - t0
+
+print(f"bi-encoder   : {t_bi:.2f}s (and encoding is one-time!)")
+print(f"cross-encoder: {t_cross:.2f}s for the SAME 1,000 comparisons")
+print("bi top hit   :", docs[bi_scores.argmax()][:60])
+print("cross top hit:", docs[cross_scores.argmax()][:60])
+</code></pre>
+    <p>
+      Expect the cross-encoder to take 20–60× longer for 1,000 docs — then imagine a
+      million. Both find the password doc here; on harder queries the cross-encoder's
+      rankings are subtly better — which is exactly the gap M12.2's reranking stage
+      exists to harvest.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Cross-encoder = read the pair together: most accurate, nothing reusable, O(n) full
+    passes per query. Bi-encoder (siamese towers, SBERT) = embed each text alone with
+    shared weights: precomputable vectors, cosine comparison, search over millions in
+    milliseconds — <strong>the architectural fact that makes RAG possible</strong>.
+    The trade is real, and two-stage retrieval buys it back. Next page: the loss that
+    teaches the towers where to put things.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Bi-encoder vs cross-encoder — the canonical retrieval question.</summary>
+      <div><p>Bi-encoder: two weight-shared encoder passes embed each text independently; similarity = cosine of the vectors. Enables offline indexing and millisecond search over millions (score = dot product), at the cost of compressing each text before knowing its counterpart. Cross-encoder: one pass over the concatenated pair with full cross-attention; several points more accurate for ranking, but produces no reusable representation — O(candidates) full passes per query. Production pattern: bi-encoder retrieves top-k, cross-encoder reranks (M12.2).</p></div>
+    </details>
+    <details>
+      <summary>Why does weight-sharing between the towers matter?</summary>
+      <div><p>Both texts must land in the SAME space for cosine to mean anything — separate weights would give two different geometries with no comparable coordinates (M1.1's "no cross-model comparison" rule, inside one system). Sharing also halves parameters and lets one deployed model serve both index-time and query-time encoding. (Asymmetric variants keep shared weights but add role prefixes — same space, role-aware placement.)</p></div>
+    </details>
+    <details>
+      <summary>What information does a bi-encoder fundamentally lose vs a cross-encoder?</summary>
+      <div><p>Pair-specific interaction: each text is compressed to a fixed vector before the comparison partner is known, so fine-grained alignments — which entity corresponds to which, negation scope against the query's intent, multi-constraint matching — are only preserved if the training data taught the model to pre-encode them. Cross-attention computes these interactions explicitly per pair. That's why cross-encoders win rankings and why hard queries (negations, multi-hop constraints) are bi-encoder weak spots.</p></div>
+    </details>
+    <details>
+      <summary>Symmetric vs asymmetric semantic search — and a production bug it explains.</summary>
+      <div><p>Symmetric: both sides are the same kind of text (duplicate/paraphrase detection). Asymmetric: short query vs long answer-bearing passage — similarity means "answers", not "resembles". Models are trained for a mode; asymmetric-trained ones (e5, bge) often require role prefixes ("query: ", "passage: "). Bug: deploying such a model without the prefixes (or a symmetric model for QA retrieval) silently degrades recall — no errors, just worse ranking. Check the model card's usage section; it's the cheapest recall improvement available.</p></div>
+    </details>
+    <details>
+      <summary>Your corpus grows from 10k to 10M chunks. What breaks in each architecture?</summary>
+      <div><p>Cross-encoder-only search was already impossible (10M passes/query). Bi-encoder: encoding cost scales linearly but is offline/parallel (M7.1 batching); query-time brute-force dot products go from trivial (10k×384 ≈ 4M ops) to heavy (~4B ops, tens-to-hundreds of ms) — this is exactly the point where ANN indexes (HNSW, M12.1) replace brute force, trading tiny recall for 100× latency. Memory: 10M × 384 floats ≈ 15 GB — quantized/PQ-compressed vectors enter the conversation. Knowing WHERE each cost bites is the systems-maturity signal.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

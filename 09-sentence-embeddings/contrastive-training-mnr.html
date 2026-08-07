@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contrastive Training &amp; MNR Loss — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="09-sentence-embeddings/contrastive-training-mnr">
+<main id="content">
+
+  <h1>Contrastive Training &amp; MNR Loss</h1>
+
+  <p>
+    The page this course has been promising since Module 2. Negative sampling's
+    pull-real/push-fake physics (M2.3), the twin towers (9.2), the cone that needs
+    spreading (9.1) — they all converge here, in the exact training recipe that made
+    all-MiniLM: <strong>a billion sentence pairs, and a loss where every batch brings
+    its own negatives for free</strong>. If M2.3 stuck, this page will feel like a
+    homecoming.
+  </p>
+
+  <h2>The data: a billion pairs, harvested not labeled</h2>
+
+  <p>
+    Contrastive training needs (anchor, positive) pairs — texts that <em>belong
+    together</em>. Nobody labeled a billion of them; they were <strong>harvested from
+    structure</strong>, M2.2's self-supervision trick at sentence scale:
+    question–answer pairs from Stack Exchange and Yahoo Answers, duplicate-question
+    pairs from Quora, (title, body) from Reddit, citation pairs from papers,
+    (caption, caption) of the same image… The all-MiniLM model card lists the full
+    menu — 32 datasets, <strong>1.17 billion pairs</strong>. The diversity is the
+    point: trained only on QA pairs you get a QA specialist; trained on everything,
+    you get the general-purpose "all-" in the name.
+  </p>
+
+  <h2>MNR: in-batch negatives, the free lunch</h2>
+
+  <p>
+    Now the loss. M2.3 sampled fake pairs deliberately; <strong>MultipleNegativesRankingLoss</strong>
+    realizes something cheaper: in a batch of 32 (anchor, positive) pairs,
+    <em>every other anchor's positive is already a negative for yours</em>.
+    Batch of 32 → each anchor gets 1 positive + 31 free negatives. Build the 32×32
+    similarity matrix (M1.2's grid, one last time), and train the diagonal to win
+    its row — softmax + cross-entropy (M3.2), where the "classes" are the batch's
+    positives:
+  </p>
+
+  <figure class="anim" id="fig-mnr">
+    <div class="fig-title">Animation · MNR on a batch of four</div>
+    <svg viewBox="0 0 640 440" aria-labelledby="fig-mn-t">
+      <title id="fig-mn-t">In-batch similarity matrix with diagonal pulled up and off-diagonal pushed down</title>
+      <text x="320" y="32" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">batch of 4 pairs → all questions × all answers similarity grid</text>
+      <!-- row labels: questions -->
+      <g font-size="17" fill="#1d4ed8" class="mono">
+        <text x="150" y="120" text-anchor="end">"reset pwd?"</text>
+        <text x="150" y="190" text-anchor="end">"refund how?"</text>
+        <text x="150" y="260" text-anchor="end">"rate limit?"</text>
+        <text x="150" y="330" text-anchor="end">"enable 2FA?"</text>
+      </g>
+      <!-- col labels -->
+      <g font-size="17" fill="#b45309" class="mono">
+        <text x="215" y="70" text-anchor="middle">ans₁</text>
+        <text x="320" y="70" text-anchor="middle">ans₂</text>
+        <text x="425" y="70" text-anchor="middle">ans₃</text>
+        <text x="530" y="70" text-anchor="middle">ans₄</text>
+      </g>
+      <!-- 4x4 cells -->
+      <g id="cells" class="mono">
+        <rect id="d1" x="170" y="90" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text id="dt1" x="215" y="120" text-anchor="middle" font-size="17" class="sv-ink">.41</text>
+        <rect x="275" y="90" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text id="o12" x="320" y="120" text-anchor="middle" font-size="17" class="sv-ink">.28</text>
+        <rect x="380" y="90" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text id="o13" x="425" y="120" text-anchor="middle" font-size="17" class="sv-ink">.19</text>
+        <rect x="485" y="90" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text id="o14" x="530" y="120" text-anchor="middle" font-size="17" class="sv-ink">.33</text>
+
+        <rect x="170" y="160" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="215" y="190" text-anchor="middle" font-size="17" class="sv-ink">.22</text>
+        <rect id="d2" x="275" y="160" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text id="dt2" x="320" y="190" text-anchor="middle" font-size="17" class="sv-ink">.45</text>
+        <rect x="380" y="160" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="425" y="190" text-anchor="middle" font-size="17" class="sv-ink">.17</text>
+        <rect x="485" y="160" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="530" y="190" text-anchor="middle" font-size="17" class="sv-ink">.25</text>
+
+        <rect x="170" y="230" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="215" y="260" text-anchor="middle" font-size="17" class="sv-ink">.15</text>
+        <rect x="275" y="230" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="320" y="260" text-anchor="middle" font-size="17" class="sv-ink">.21</text>
+        <rect id="d3" x="380" y="230" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text id="dt3" x="425" y="260" text-anchor="middle" font-size="17" class="sv-ink">.38</text>
+        <rect x="485" y="230" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="530" y="260" text-anchor="middle" font-size="17" class="sv-ink">.19</text>
+
+        <rect x="170" y="300" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="215" y="330" text-anchor="middle" font-size="17" class="sv-ink">.30</text>
+        <rect x="275" y="300" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="320" y="330" text-anchor="middle" font-size="17" class="sv-ink">.24</text>
+        <rect x="380" y="300" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text x="425" y="330" text-anchor="middle" font-size="17" class="sv-ink">.20</text>
+        <rect id="d4" x="485" y="300" width="90" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/><text id="dt4" x="530" y="330" text-anchor="middle" font-size="17" class="sv-ink">.42</text>
+      </g>
+      <g id="verdict9" class="sp-hide">
+        <rect x="60" y="376" width="520" height="52" rx="12" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="320" y="398" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">loss per row: softmax + cross-entropy, "correct class" = the diagonal</text>
+        <text x="320" y="420" text-anchor="middle" font-size="17" fill="#1d4ed8">M2.3's pull/push + M3.2's loss + M1.2's grid — one line of code</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-mn-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-mnr svg",
+        caption: "#fig-mn-cap",
+        steps: [
+          { caption: "Four (question, answer) pairs enter as one batch. Both towers embed all eight texts; dot products fill the 4×4 grid. Before training: the diagonal (true pairs) barely beats the noise." },
+          { caption: "The training signal: each row is a 4-way classification — 'which answer belongs to MY question?' The diagonal cell is the correct class. Gradients PULL diagonal pairs together…",
+            addClass: { "#d1": "sv-hl", "#d2": "sv-hl", "#d3": "sv-hl", "#d4": "sv-hl" },
+            attrs: { "#dt1": { textContent: ".78", fill: "#047857" }, "#dt2": { textContent: ".81", fill: "#047857" },
+                     "#dt3": { textContent: ".74", fill: "#047857" }, "#dt4": { textContent: ".79", fill: "#047857" },
+                     "#d1": { fill: "#d1fae5", stroke: "#059669" }, "#d2": { fill: "#d1fae5", stroke: "#059669" },
+                     "#d3": { fill: "#d1fae5", stroke: "#059669" }, "#d4": { fill: "#d1fae5", stroke: "#059669" } }, holdMs: 6400 },
+          { caption: "…and PUSH every off-diagonal cell down — 31 free negatives per anchor at batch 32, no sampling step needed (M2.3's fakes, harvested from the batch itself).",
+            attrs: { "#o12": { textContent: ".06", fill: "#b91c1c" }, "#o13": { textContent: ".03", fill: "#b91c1c" }, "#o14": { textContent: ".08", fill: "#b91c1c" } }, holdMs: 6000 },
+          { caption: "Repeat over a billion pairs and the 9.1 cone spreads into a sphere where cosine = relatedness. This grid, at batch size 32–128, over 32 datasets, IS how your embedding model learned its geometry.", show: ["#verdict9"], holdMs: 6600 }
+        ]
+      });
+    });
+  </script>
+
+  <div class="formula">
+    <div class="math">L = −log [ e^(sim(qᵢ,aᵢ)/τ) / Σⱼ e^(sim(qᵢ,aⱼ)/τ) ]</div>
+    <div class="plain">
+      <b>In plain words:</b> softmax over "my answer vs everyone else's answers,"
+      cross-entropy on getting your own. τ (temperature — M3.2's dial, reappearing as
+      a trainable knob) sharpens the contest. Note what this literally trains:
+      <b>retrieval-in-miniature</b> — find the right answer among distractors —
+      which is why these embeddings transfer so directly to your search stack.
+    </div>
+  </div>
+
+  <h2>Two consequences worth engraving</h2>
+
+  <p>
+    <strong>Bigger batches = harder exams.</strong> With 32 in-batch negatives the
+    model must beat 31 distractors; with 65,536 (CLIP-scale) it must beat 65,535 —
+    a vastly sharper training signal. This is why contrastive recipes crave huge
+    batches (and use M7.3 tricks to fake them), and why batch size appears in every
+    embedding paper's ablations.
+    <strong>Random negatives eventually teach nothing.</strong> Late in training,
+    random batchmates are trivially distinguishable; progress then comes from
+    <strong>hard negatives</strong> — wrong answers that <em>look</em> right (top
+    BM25 hits that aren't the answer, near-miss paraphrases) — mined deliberately and
+    injected into batches. M2.3's frequency^0.75 lesson ("negative quality decides
+    contrastive quality"), now at production scale; you'll apply it to your own
+    corpus in 9.5.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      The actual all-MiniLM-L6-v2 recipe from its card: <strong>1.17B pairs</strong>
+      across 32 datasets (Reddit 727M, S2ORC citations 116M, WikiAnswers 77M,
+      Stack Exchange 68M…), MNR loss, batch <strong>1024</strong> (=1023 free
+      negatives per anchor), 100k steps, seq length 128, trained on a TPU v3-8 in
+      ~55 hours during the 2021 HF community week. The whole thing is public —
+      the model you've called a black box for years has an open recipe you can now
+      read line by line.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      The M2.3 promise is now fully paid: word2vec pulled <em>word</em> pairs from
+      sliding windows; MiniLM pulled <em>sentence</em> pairs from internet structure;
+      same physics, same softmax-over-candidates shape, three years and six orders
+      of magnitude apart. And notice the beautiful circularity: the loss simulates
+      retrieval (find your answer among distractors), which is why the resulting
+      vectors are so good at… retrieval. Your RAG system works because its embedder
+      spent 100k training steps playing a tiny version of your production workload.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: implement MNR in 15 lines, watch the diagonal win</div>
+<pre><code>import torch, torch.nn.functional as F
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+qs = ["how do I reset my password",
+      "what is your refund policy",
+      "api rate limit details",
+      "enable two factor auth"]
+ans = ["Open Settings → Security → Reset Password.",
+       "Returns are accepted within 30 days of purchase.",
+       "You may send up to 100 requests per minute.",
+       "Add a second login step under Account → 2FA."]
+
+Q = torch.tensor(model.encode(qs, normalize_embeddings=True))
+A = torch.tensor(model.encode(ans, normalize_embeddings=True))
+
+sim = Q @ A.T / 0.05                        # the grid, temperature-scaled
+labels = torch.arange(len(qs))              # correct class = diagonal
+loss = F.cross_entropy(sim, labels)         # MNR IS just this!
+
+print("similarity grid:\n", (Q @ A.T).round(decimals=2))
+print("row argmax == diagonal?", (sim.argmax(1) == labels).all().item())
+print("MNR loss:", round(loss.item(), 4))   # low — MiniLM already trained this way
+</code></pre>
+    <p>
+      The grid should show a proud diagonal — because you're evaluating the model on
+      the very game it was trained on. Those 15 lines are the honest core of
+      <code>MultipleNegativesRankingLoss</code>; in 9.5 you'll aim this exact loss at
+      your own domain pairs and watch recall@5 jump.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    all-MiniLM's geometry was trained by <strong>MNR loss over a billion harvested
+    pairs</strong>: batch similarity grid, softmax per row, diagonal must win —
+    pull/push physics with free in-batch negatives. Bigger batches sharpen the exam;
+    hard negatives keep it teaching. It's word2vec's game at sentence scale, and it's
+    literally retrieval practice — which is why it powers your retrieval.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Explain MultipleNegativesRankingLoss precisely.</summary>
+      <div><p>For a batch of (anchor, positive) pairs, embed all anchors and positives, compute the full anchor×positive similarity matrix (scaled by a temperature), and apply cross-entropy per row with the diagonal as the correct class — each anchor must rank its own positive above the batch's other positives, which serve as free negatives. It's simultaneously a contrastive loss (pull/push) and a (batch-size)-way classification, and it directly simulates retrieval.</p></div>
+    </details>
+    <details>
+      <summary>Why do in-batch negatives make batch size a quality hyperparameter?</summary>
+      <div><p>Each anchor's negative count = batch size − 1, so larger batches pose harder discrimination problems (beat 1023 distractors vs 31) and better approximate the true softmax over all texts (M2.3's unaffordable denominator). Empirically retrieval quality rises with contrastive batch size — hence recipes using 1k+ batches, gradient caching (GradCache) to simulate them on small GPUs, and CLIP's 32k batches. Diminishing returns arrive when random negatives become trivially easy — the hard-negative cue.</p></div>
+    </details>
+    <details>
+      <summary>What are hard negatives and why do they matter more as training progresses?</summary>
+      <div><p>Negatives that are plausible-but-wrong — high-BM25 non-answers, near-paraphrases with a changed fact, same-topic different-intent passages. Early in training random negatives suffice (everything's misplaced); later the model separates easy cases and random negatives provide ~zero gradient — progress requires negatives near the decision boundary. Mining them (via BM25 or the current model's own errors) is the highest-leverage data intervention in embedding fine-tuning — M2.3's negative-quality principle, industrialized. Caveat: false negatives (accidentally-true pairs labeled negative) actively damage the space.</p></div>
+    </details>
+    <details>
+      <summary>Why does the temperature τ appear in contrastive losses and what does changing it do?</summary>
+      <div><p>Cosines live in [−1,1] — tiny logit gaps that softmax barely distinguishes; dividing by τ≈0.01–0.1 scales them into a decisive range (M3.2's sharpening, used at train time). Lower τ: harsher focus on the hardest negatives (sharper distribution → gradients concentrate on the closest distractors) but less stable; higher τ: softer, more uniform pull. It's often trainable (CLIP learns it). Interviewers like this because it links softmax mechanics to representation quality.</p></div>
+    </details>
+    <details>
+      <summary>Where did a billion training pairs come from without labeling?</summary>
+      <div><p>Structural self-supervision: platforms encode relatedness for free — (question, accepted answer) from StackExchange, duplicate-question pairs from Quora, (post title, body) from Reddit, (paper, cited paper) abstracts, image caption pairs. Each source contributes a different FLAVOR of similarity, and the mixture is why "all-" models generalize across tasks. Same principle as word2vec's windows and GPT's next-token labels (M2.2, M6.1): find structure that implies the label, then harvest at scale.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

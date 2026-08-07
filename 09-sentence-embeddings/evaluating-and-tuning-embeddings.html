@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Evaluating &amp; Tuning Embeddings — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="09-sentence-embeddings/evaluating-and-tuning-embeddings">
+<main id="content">
+
+  <h1>Evaluating &amp; Tuning Embeddings</h1>
+
+  <p>
+    The emotional payoff of the course. You know how your embedding model was built
+    (9.1–9.4); this capstone page is where you <strong>measure it on your own data and
+    make it better</strong> — the retrieval metrics, how to read MTEB without being
+    fooled, and the fine-tune that typically buys +10–25 recall points on domain
+    corpora for an hour of GPU time. This is the single most portfolio-worthy skill
+    in the course.
+  </p>
+
+  <h2>The three retrieval metrics, animated once, used forever</h2>
+
+  <figure class="anim" id="fig-metrics">
+    <div class="fig-title">Animation · recall@k, MRR, nDCG</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-mt-t">
+      <title id="fig-mt-t">Retrieval metrics illustrated on a ranked list</title>
+      <text x="320" y="34" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">query: "how do I reset my password?" · ★ = the truly relevant chunk</text>
+      <!-- ranked list -->
+      <g id="ranks" class="mono">
+        <rect x="60" y="54" width="360" height="42" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/><text x="80" y="82" font-size="17" class="sv-ink">#1  billing FAQ</text>
+        <rect x="60" y="104" width="360" height="42" rx="9" fill="#d1fae5" stroke="#059669" stroke-width="2"/><text x="80" y="132" font-size="17" fill="#047857">#2  ★ password reset guide</text>
+        <rect x="60" y="154" width="360" height="42" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/><text x="80" y="182" font-size="17" class="sv-ink">#3  security overview</text>
+        <rect x="60" y="204" width="360" height="42" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/><text x="80" y="232" font-size="17" class="sv-ink">#4  account deletion</text>
+        <rect x="60" y="254" width="360" height="42" rx="9" fill="#f1f5f9" stroke="#cbd5e1"/><text x="80" y="282" font-size="17" class="sv-ink">#5  2FA setup</text>
+      </g>
+      <!-- metric panels -->
+      <g id="m-recall" class="sp-hide">
+        <rect x="440" y="54" width="180" height="92" rx="12" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="530" y="82" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">recall@5 = 1</text>
+        <text x="530" y="106" text-anchor="middle" font-size="17" fill="#1d4ed8">★ in top 5?</text>
+        <text x="530" y="130" text-anchor="middle" font-size="17" fill="#1d4ed8">yes → 1, no → 0</text>
+      </g>
+      <g id="m-mrr" class="sp-hide">
+        <rect x="440" y="156" width="180" height="92" rx="12" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="530" y="184" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">MRR = 1/2 = .50</text>
+        <text x="530" y="208" text-anchor="middle" font-size="17" fill="#b45309">1 ÷ rank of ★</text>
+        <text x="530" y="232" text-anchor="middle" font-size="17" fill="#b45309">rank 1 → 1.0!</text>
+      </g>
+      <g id="m-ndcg" class="sp-hide">
+        <rect x="440" y="258" width="180" height="92" rx="12" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="530" y="286" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">nDCG</text>
+        <text x="530" y="310" text-anchor="middle" font-size="17" fill="#047857">graded relevance,</text>
+        <text x="530" y="334" text-anchor="middle" font-size="17" fill="#047857">log-discounted rank</text>
+      </g>
+      <g id="which" class="sp-hide">
+        <rect x="60" y="366" width="560" height="42" rx="10" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="340" y="393" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">RAG rule: recall@k for "did we FEED the LLM the answer?" — k = your top-k setting</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-mt-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-metrics svg",
+        caption: "#fig-mt-cap",
+        steps: [
+          { caption: "One test query, the retriever's ranked top-5, and ground truth: the ★ chunk actually answers it. Every retrieval metric is a different reading of this list." },
+          { caption: "<b>recall@k</b>: is ★ anywhere in the top k? Binary per query, averaged over your test set. The RAG metric — because if ★ isn't in what you pass the LLM, nothing downstream can save you.", show: ["#m-recall"], holdMs: 6000 },
+          { caption: "<b>MRR</b> (mean reciprocal rank): 1 ÷ rank of the first relevant hit — rewards putting ★ FIRST. Use when position matters (top-1 UIs, reranking evals — M3.6's precision instinct, rank-flavored).", show: ["#m-mrr"], holdMs: 5800 },
+          { caption: "<b>nDCG</b>: the general one — handles graded relevance (perfect/partial/irrelevant) with log-discounted positions. Standard in search teams and MTEB; overkill for most RAG evals.", show: ["#m-ndcg"] },
+          { caption: "Choosing: evaluating a RAG retriever → recall@k at YOUR k. Evaluating a reranker → MRR or nDCG@10. Print this rule on your monitor.", show: ["#which"], holdMs: 5800 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Building the eval set from your own corpus</h2>
+
+  <p>
+    The metrics need (query, relevant-chunk) pairs from <em>your</em> domain — 50–200
+    is plenty to start. Three sources, in order of quality: <strong>real user
+    queries</strong> from your logs, hand-matched to the chunk that answers them (an
+    hour of honest work, the gold standard); <strong>synthetic queries</strong> — for
+    each sampled chunk, have an LLM write 2–3 questions it answers (scales instantly;
+    slightly optimistic since generated questions echo the chunk's wording);
+    <strong>held-out FAQ/doc-title pairs</strong> if your corpus has them. Rules
+    carried from M3.3/M8.2: keep this set <em>sealed</em> from any fine-tuning data,
+    dedupe near-identical queries, and include the awkward real-world ones —
+    misspelled, vague, one-word — because that's your production distribution.
+  </p>
+
+  <h2>Reading MTEB without being fooled</h2>
+
+  <p>
+    MTEB (Massive Text Embedding Benchmark) ranks embedders across 50+ tasks —
+    retrieval, clustering, classification, STS. Use it as a <strong>shortlist
+    generator, not a decision</strong>, with three M3.6-grade cautions:
+    <strong>(1) Task mismatch</strong> — the leaderboard average blends tasks you
+    don't have; open the per-task columns and read only Retrieval scores for RAG.
+    <strong>(2) The cost column is missing</strong> — #1 models are often 7B-parameter
+    monsters (100× MiniLM's cost per embedding; remember 9.4's triangle) and the
+    top-10 spread can be ~3 points; check size and dimensionality (storage!) next to
+    the score. <strong>(3) Contamination and overfitting-to-the-benchmark</strong>
+    (M3.3's experimenter-leakage at field scale) — newer models are partly tuned
+    <em>toward</em> MTEB. The professional loop: shortlist 2–3 plausible models from
+    MTEB Retrieval → run YOUR recall@k eval → decide with your numbers.
+  </p>
+
+  <h2>The fine-tune: MNR on your pairs</h2>
+
+  <p>
+    And now everything converges. Take your (query, chunk) pairs — the training split,
+    not the sealed eval! — and run 9.3's exact loss on 9.2's towers with M8.2's
+    recipe. MiniLM is 22M parameters: full fine-tuning, no LoRA needed, minutes per
+    epoch on any GPU. Why it works so well: generic embedders spread capacity over
+    all of language; your corpus lives in a narrow slice full of domain vocabulary,
+    product names, and question styles the generic geometry treats as noise. A few
+    hundred pairs teach the space what "similar" means <em>in your world</em> —
+    M8.1's transfer-learning miracle, applied to geometry.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers: typical before/after</div>
+    <p>
+      Representative results for fine-tuning all-MiniLM-L6-v2 on 150–300 domain pairs
+      (widely reproduced pattern): general-domain corpora: recall@5
+      <strong>0.82 → 0.85</strong> (modest — the base model already knows general
+      English). Technical/product corpora (your case): <strong>0.61 → 0.79</strong>.
+      Jargon-heavy niches (legal, medical, internal tools): <strong>0.45 → 0.72</strong>.
+      The rule: <strong>the further your domain from Reddit-and-Wikipedia English,
+      the bigger the win</strong>. Cost: under an hour on a T4; inference cost after:
+      identical (same architecture, same 384 dims — only the geometry moved).
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Trace what you're about to do against the whole course: harvest pairs (M2.2's
+      self-supervision), MNR loss (9.3 = M2.3's physics + M3.2's softmax), the
+      training loop (M3.3), curve-watching and seed honesty (M8.2), measured with
+      recall@k (M3.6's family) on a sealed set (M3.3's discipline), on towers (9.2)
+      built from blocks (M5.6) you can parameter-count (M1.3). One exercise, eleven
+      modules load-bearing. This is what "the missing middle, filled in" looks like
+      as a git commit.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build (MODULE CAPSTONE): fine-tune YOUR retriever, measure the jump</div>
+<pre><code>from sentence_transformers import (SentenceTransformer, InputExample,
+                                   losses, evaluation)
+from torch.utils.data import DataLoader
+
+# 1) your pairs: (real or synthetic query, the chunk that answers it)
+#    from your RAG corpus. 150+ train pairs, 50+ SEALED eval pairs.
+train_pairs = [("how do I reset my password",
+                "Open Settings > Security > Reset Password. A link arrives by email."),
+               # ... yours here ...
+              ]
+eval_queries = {"q1": "I forgot my login"}
+eval_corpus  = {"c1": "Open Settings > Security > Reset Password...", }  # all chunks
+eval_relevant = {"q1": {"c1"}}                                           # truth
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+# 2) BEFORE score — never skip the baseline (M3.6!)
+ir = evaluation.InformationRetrievalEvaluator(
+    eval_queries, eval_corpus, eval_relevant,
+    accuracy_at_k=[5], name="before")
+print("recall@5 before:", ir(model))
+
+# 3) the fine-tune: 9.3's loss, 8.2's recipe
+train_data = [InputExample(texts=[q, c]) for q, c in train_pairs]
+loader = DataLoader(train_data, shuffle=True, batch_size=32)   # 31 free negatives
+loss = losses.MultipleNegativesRankingLoss(model)
+model.fit(train_objectives=[(loader, loss)], epochs=2,
+          warmup_steps=int(len(loader) * 0.1), show_progress_bar=True)
+
+# 4) AFTER — same sealed eval
+print("recall@5 after:", ir(model))
+model.save("my-domain-minilm")     # drop-in replacement: same dims, same speed
+</code></pre>
+    <p>
+      Then the honest extras: 3 seeds (M8.2), a skim of the failures that remain
+      (they seed your next data round — and your hard negatives, 9.3), and one
+      regression check that general queries didn't degrade (M8.1's forgetting,
+      geometric edition). Re-embed your corpus with the saved model and your
+      production RAG just got measurably better — with a before/after number for
+      the portfolio.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Evaluate retrievers with <strong>recall@k on your own sealed (query, chunk)
+    pairs</strong> — MTEB shortlists, your eval decides. Then fine-tune with MNR on
+    a few hundred domain pairs: an hour of compute for double-digit recall gains
+    whenever your domain strays from generic English. The model you've used blindly
+    for years is now something you can audit, explain, and improve on demand.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Define recall@k, MRR and nDCG, and match each to its use case.</summary>
+      <div><p>recall@k: fraction of queries whose relevant item appears in the top k — the RAG feeding metric (set k to your retrieval top-k). MRR: mean of 1/rank-of-first-relevant — rewards rank-1 placement; right for top-answer UIs and reranker evals. nDCG@k: sums graded relevance with logarithmic position discounts, normalized by the ideal ranking — the general search metric when relevance isn't binary. Interviewers want the mapping, not just definitions: "did we retrieve it" vs "did we rank it first" vs "how good is the whole ordered page".</p></div>
+    </details>
+    <details>
+      <summary>How would you build an evaluation set for a RAG retriever with no labeled data?</summary>
+      <div><p>Best: mine real user queries from logs, hand-annotate the answering chunk(s) for 100–200 of them. Scalable: synthetic generation — sample chunks, have an LLM produce 2–3 questions each chunk answers (caveat: lexical echo makes scores optimistic; paraphrase or use a different model to roughen them). Supplement with existing structure (FAQ pairs, ticket→doc links). Discipline: seal it from training data, dedupe, include messy real-world queries, and version it — it's your regression suite (M12.3 extends it to full-pipeline eval).</p></div>
+    </details>
+    <details>
+      <summary>Why does fine-tuning an embedder help so much on domain data, and when does it NOT?</summary>
+      <div><p>Helps: generic contrastive training (9.3) defined "similar" over internet-general pairs; domain corpora have vocabulary, entities and query-styles that geometry treats ambiguously — a few hundred domain pairs re-carve the space where it matters (transfer learning on geometry; gains scale with domain-distance from generic text: +3 points on general corpora, +20+ on jargon-heavy ones). Doesn't help: when retrieval already saturates (recall@5 > 0.9 — errors are elsewhere), when failures are chunking/query-ambiguity problems (M12.1/12.2 territory), or with too few/dirty pairs (noise in, geometry damage out). Diagnose before tuning: inspect WHERE recall fails first.</p></div>
+    </details>
+    <details>
+      <summary>How do you use the MTEB leaderboard responsibly?</summary>
+      <div><p>As a shortlist filter: sort by the RETRIEVAL task family (not the blended average), then weigh the unlisted columns — parameter count/latency (7B embedders cost ~100× MiniLM per call), embedding dimensionality (storage and search cost scale with it), max sequence length, license. Assume some benchmark-tuning/contamination in top entries (the M11.4 skepticism). Final decision only from your own recall@k on your corpus — leaderboard deltas of 2–3 points routinely invert on specific domains. "Shortlist globally, decide locally."</p></div>
+    </details>
+    <details>
+      <summary>After fine-tuning your embedder, what must change operationally in the RAG system?</summary>
+      <div><p>Re-embed and re-index the ENTIRE corpus — old and new vectors live in different geometries and cannot be mixed (M1.1's cross-model rule; fine-tuning made it a different model). Plan: versioned indexes, dual-write or blue-green swap, and re-run the eval suite against the new index before cutover. Also version the model artifact with the index it built. Forgetting this — querying an old index with new-model query vectors — silently degrades results and is a classic postmortem; mentioning it unprompted is a strong production signal.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

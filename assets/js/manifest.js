@@ -119,7 +119,6 @@ window.SITE_MANIFEST = {
       slug: "09-sentence-embeddings",
       num: "M9",
       title: "How all-MiniLM Is Actually Made",
-      coming: true,
       pages: [
         { slug: "from-tokens-to-a-sentence-vector", title: "From Tokens to a Sentence Vector" },
         { slug: "siamese-networks-sbert", title: "Siamese Networks & SBERT" },
@@ -132,7 +131,6 @@ window.SITE_MANIFEST = {
       slug: "10-ner",
       num: "M10",
       title: "NER Internals: Demystifying GLiNER",
-      coming: true,
       pages: [
         { slug: "ner-as-token-classification", title: "NER as Token Classification" },
         { slug: "gliner-architecture", title: "GLiNER's Architecture" }

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NER as Token Classification — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="10-ner/ner-as-token-classification">
+<main id="content">
+
+  <h1>NER as Token Classification</h1>
+
+  <p>
+    Loop-closer #2 begins. You've used GLiNER — typed entity names like
+    <code>"medication"</code> or <code>"invoice number"</code> into a list and watched
+    it find them with zero training. To appreciate how strange that is, you first need
+    the classic way — the design that ruled NER for two decades — and its ceiling:
+    <strong>a fixed menu of entity types, baked in at training time</strong>.
+    This page is the classic recipe, its evaluation rules, and exactly why GLiNER's
+    trick (next page) surprised you.
+  </p>
+
+  <h2>The classic recipe: a label for every token</h2>
+
+  <p>
+    Classic NER is M8.1's head-transplant, applied per token: take a pretrained encoder
+    (BERT-family — bidirectional context is exactly what entity disambiguation needs,
+    M6.2), and bolt on a classification head that runs at <strong>every position</strong>:
+    each token's contextual vector → one label from a fixed set. The labels use the
+    <strong>BIO scheme</strong>: <code>B-TYPE</code> (begins an entity),
+    <code>I-TYPE</code> (inside/continues one), <code>O</code> (outside — plain text).
+  </p>
+
+  <figure class="anim" id="fig-bio">
+    <div class="fig-title">Animation · BIO tags stamp the sentence</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-bio-t">
+      <title id="fig-bio-t">BIO tagging over a sentence with adjacent entities</title>
+      <!-- sentence -->
+      <g class="mono">
+        <text x="60"  y="80" text-anchor="middle" font-size="18" class="sv-ink">Sundar</text>
+        <text x="160" y="80" text-anchor="middle" font-size="18" class="sv-ink">Pichai</text>
+        <text x="250" y="80" text-anchor="middle" font-size="18" class="sv-ink">visited</text>
+        <text x="345" y="80" text-anchor="middle" font-size="18" class="sv-ink">Google</text>
+        <text x="440" y="80" text-anchor="middle" font-size="18" class="sv-ink">India</text>
+        <text x="530" y="80" text-anchor="middle" font-size="18" class="sv-ink">in</text>
+        <text x="590" y="80" text-anchor="middle" font-size="18" class="sv-ink">June</text>
+      </g>
+      <!-- tags -->
+      <g id="tags1" class="sp-hide">
+        <rect x="24" y="102" width="76" height="36" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="62" y="126" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">B-PER</text>
+        <rect x="124" y="102" width="76" height="36" rx="8" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="162" y="126" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">I-PER</text>
+      </g>
+      <g id="tags2" class="sp-hide">
+        <rect x="216" y="102" width="66" height="36" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="249" y="126" text-anchor="middle" font-size="17" class="mono" fill="#64748b">O</text>
+        <rect x="308" y="102" width="76" height="36" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+        <text x="346" y="126" text-anchor="middle" font-size="17" class="mono" fill="#047857">B-ORG</text>
+        <rect x="402" y="102" width="76" height="36" rx="8" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="440" y="126" text-anchor="middle" font-size="17" class="mono" fill="#047857">I-ORG</text>
+      </g>
+      <g id="tags3" class="sp-hide">
+        <rect x="500" y="102" width="56" height="36" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="528" y="126" text-anchor="middle" font-size="17" class="mono" fill="#64748b">O</text>
+        <rect x="564" y="102" width="70" height="36" rx="8" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="599" y="126" text-anchor="middle" font-size="17" class="mono" fill="#b45309">B-DATE</text>
+      </g>
+      <!-- why B exists -->
+      <g id="whyb" class="sp-hide">
+        <rect x="40" y="170" width="560" height="76" rx="12" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="320" y="198" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">why "B-" exists: "…visited [Paris] [Berlin] and [Rome]" —</text>
+        <text x="320" y="224" text-anchor="middle" font-size="17" fill="#b91c1c">adjacent entities! B-LOC B-LOC O B-LOC keeps them apart;</text>
+        <text x="320" y="242" text-anchor="middle" font-size="17" fill="#b91c1c">plain LOC LOC LOC would merge them into one entity</text>
+      </g>
+      <!-- subword note -->
+      <g id="subword" class="sp-hide">
+        <rect x="40" y="266" width="560" height="76" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="294" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">the M5.1 wrinkle: "Pichai" → [Pi, ##chai] — two tokens, one word</text>
+        <text x="320" y="320" text-anchor="middle" font-size="17" fill="#64748b">convention: label the FIRST subtoken, ignore continuations in the loss,</text>
+        <text x="320" y="338" text-anchor="middle" font-size="17" fill="#64748b">re-merge spans at prediction time</text>
+      </g>
+      <g id="menu10" class="sp-hide">
+        <rect x="40" y="360" width="560" height="34" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="320" y="383" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">the head's label menu is FIXED at training: {PER, ORG, LOC, DATE…} — remember this</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-bio-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-bio svg",
+        caption: "#fig-bio-cap",
+        steps: [
+          { caption: "The encoder (M5.6) produces a contextual vector per token; the head classifies each one. 'Sundar' begins a person: B-PER; 'Pichai' continues it: I-PER." },
+          { caption: "'visited' is plain text: O. 'Google India' — B-ORG then I-ORG: the B/I structure encodes span boundaries in per-token labels.", show: ["#tags2", "#tags3"] },
+          { caption: "The B- prefix isn't decoration: with adjacent same-type entities, B marks where one ends and the next begins. Without it, neighbors merge.", show: ["#whyb"], holdMs: 5800 },
+          { caption: "And M5.1 collects its toll: labels live on WORDS but models see SUBTOKENS — the standard fix is label-the-first-piece. (A real bug source in every custom NER pipeline ever written.)", show: ["#subword"], holdMs: 5800 },
+          { caption: "Works beautifully — 20 years of SOTA. But stare at that fixed label menu: it's the ceiling this whole page exists to show you.", show: ["#menu10"], holdMs: 5600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Evaluation: span-level, exact-match, unforgiving</h2>
+
+  <p>
+    NER is scored with M3.6's precision/recall/F1 — but on <strong>whole spans, not
+    tokens</strong>, and with <strong>exact-match</strong> severity: a predicted
+    entity counts only if its boundaries AND type both match the gold answer
+    perfectly. Predict "Google" where gold says "Google India"? Zero credit — and it
+    double-hurts: a false positive (your wrong span) <em>and</em> a false negative
+    (the missed gold span). This strictness is why NER F1 numbers look modest next to
+    classification accuracies, why partial-credit variants exist (but exact-match
+    remains the standard), and why span boundaries — not types — are where most real
+    systems bleed points.
+  </p>
+
+  <h2>The ceiling: a fixed menu, priced per change</h2>
+
+  <p>
+    Now the limitation that defines the whole classic era. The head is one matrix:
+    384 → (2 × num_types + 1) logits. The label set is <strong>architecture</strong> —
+    chosen before training, immortalized in the head's shape. Need a new entity type
+    ("medication", "SKU", "clause reference")? The full bill: annotate hundreds to
+    thousands of examples (BIO, by hand, with M8.2's consistency discipline), retrain,
+    re-evaluate, redeploy. Weeks and real money <em>per type</em>. For 20 years this
+    was simply what NER cost — CoNLL's four types (person/org/location/misc) became
+    the universal demo not because the world has four entity types, but because
+    labeled data is that expensive. Which sets up the question GLiNER answers:
+    <em>what if the entity type were an input instead of an output class?</em>
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      CoNLL-2003 — the benchmark that defined the field: ~<strong>22k sentences</strong>,
+      4 entity types, and two decades of progress legible in one column: rule-based
+      systems ~60 F1 → CRF-era ML ~80 → BiLSTM 2016 ~91 → BERT fine-tune 2019 ~92.8 →
+      modern SOTA ≈ <strong>94</strong> (span-level exact-match — human agreement is
+      ~96–97, so the task is nearly saturated). Annotation economics, the real
+      constraint: quality NER labeling runs <strong>$0.05–0.30 per entity</strong>;
+      a custom 5-type extractor classically costs thousands of dollars of labeling
+      before the first F1 is measured.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Now your GLiNER experience has its proper contrast: you typed
+      <code>["person", "medication", "invoice number"]</code> at <em>inference
+      time</em> and got entities — no annotation invoice, no retraining, types you
+      invented on the spot. Against this page's economics, that should now read as
+      genuinely shocking. Also note the quiet M3.6→here→M12 metric thread: span-F1's
+      exact-match strictness is the same discipline as recall@k's binary honesty —
+      you'll measure GLiNER with it in the next build.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: run classic NER, meet its menu</div>
+<pre><code>from transformers import pipeline
+
+ner = pipeline("token-classification",
+               model="dslim/bert-base-NER",          # BERT + BIO head, CoNLL types
+               aggregation_strategy="simple")        # re-merges subword pieces!
+
+text = ("Sundar Pichai visited Google India in June and discussed "
+        "the Gemini launch and a 500mg dose of paracetamol.")
+
+for e in ner(text):
+    print(f"{e['entity_group']:6s} {e['score']:.2f}  {e['word']}")
+
+# note what it CAN'T see: 'Gemini' might get shoehorned into MISC/ORG,
+# '500mg'/'paracetamol' are invisible — MEDICATION isn't on the 2003 menu,
+# and no prompt can add it. That wall is this page's whole point.
+</code></pre>
+    <p>
+      Try texts from your own domain and watch domain entities fall through the
+      four-type menu. The <code>aggregation_strategy</code> flag is the subword
+      re-merging from the animation, productionized. Keep this pipeline handy —
+      next page's build races it head-to-head against GLiNER.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Classic NER = encoder + per-token classification head over
+    <strong>BIO tags</strong>, scored by <strong>span-level exact-match F1</strong>.
+    It's accurate, mature — and its label menu is frozen into the head's shape, making
+    every new entity type an annotation-and-retraining project. Hold that ceiling
+    firmly; the next page dissolves it with a trick you already know from your
+    own RAG system.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Explain the BIO tagging scheme and why the B- prefix is necessary.</summary>
+      <div><p>Each token gets B-TYPE (entity begins), I-TYPE (entity continues) or O (outside), turning span extraction into per-token classification. B- disambiguates adjacent same-type entities: "Paris Berlin Rome" as three LOCs needs B-LOC B-LOC (…) — a plain per-type tag would merge neighbors into one span. Variants exist (BILOU/BIOES add Last/Unit tags for slightly richer boundary signal), but BIO is the standard. Bonus point: illegal sequences like O→I-PER need constrained decoding or post-fixing.</p></div>
+    </details>
+    <details>
+      <summary>Why is NER evaluated with span-level exact-match F1, and what behavior does that create?</summary>
+      <div><p>The consumer of NER needs complete, correctly-typed spans — "Google" when the entity is "Google India" is operationally wrong (wrong database key, wrong link). So a prediction scores only on exact boundary + type match; partial overlaps count as both a false positive and a false negative. Consequences: scores look low relative to token accuracy, boundary errors dominate the loss of points, and systems invest heavily in boundary detection. It's M3.6's precision/recall made strict — and the same all-or-nothing honesty as recall@k.</p></div>
+    </details>
+    <details>
+      <summary>How do you handle the subword/label alignment problem in NER fine-tuning?</summary>
+      <div><p>Labels are word-level; models tokenize to subwords (M5.1) — "Pichai" becomes [Pi, ##chai]. Standard: assign the word's label to its first subtoken and mask the rest from the loss (label −100 in HF); at inference, aggregate subtokens back into words/spans (HF's aggregation_strategy). Alternatives (label all pieces I-…) exist but first-piece is convention. It's a top-3 source of silent bugs in custom NER code — off-by-one alignment quietly corrupts training labels.</p></div>
+    </details>
+    <details>
+      <summary>A stakeholder wants five new entity types added to your classic NER system. Walk through the real cost.</summary>
+      <div><p>(1) Annotation: define guidelines (edge cases! nested mentions!), label 500–2000+ examples per type with double-annotation for consistency (M8.2's 80%) — the dominant cost, likely thousands of dollars/weeks. (2) Retrain: new head shape (menu is architecture), full fine-tune, hyperparameter pass. (3) Re-evaluate: span-F1 per type, regression-check the OLD types (the head changed — M8.1 forgetting applies). (4) Redeploy + monitor. Then the pivot a good candidate makes: for many use cases, a zero-shot system (GLiNER-class) or LLM extraction gets 80–90% of the quality at ~zero marginal cost per type — the classic pipeline is now the HIGH-precision option, not the default.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

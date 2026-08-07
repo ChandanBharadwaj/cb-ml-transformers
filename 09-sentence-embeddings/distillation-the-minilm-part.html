@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Distillation: The MiniLM Part — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="09-sentence-embeddings/distillation-the-minilm-part">
+<main id="content">
+
+  <h1>Distillation: The MiniLM Part</h1>
+
+  <p>
+    One question remains about your embedding model's name: why <em>Mini</em>?
+    The answer is <strong>knowledge distillation</strong> — the art of teaching a
+    small student to imitate a big teacher — and MiniLM's specific variant is elegant
+    enough to be worth knowing in detail. By the end of this page, every character of
+    "all-MiniLM-L6-v2" is decoded, and you'll know why 22M parameters embed almost as
+    well as 110M.
+  </p>
+
+  <h2>Distillation: soft targets carry dark knowledge</h2>
+
+  <p>
+    The core idea (Hinton, 2015): don't train the student on hard labels — train it on
+    the teacher's <strong>full output distribution</strong>. When BERT-large predicts
+    a masked word as <code>examined .41, treated .19, x-rayed .08…</code>, that
+    ranking encodes <em>relationships between options</em> — "dark knowledge" absent
+    from the bare label "examined". Matching soft distributions (a cross-entropy
+    between teacher and student outputs — M3.2 with the teacher as "truth") transfers
+    far more signal per example than labels ever could. It's why DistilBERT keeps
+    ~97% of BERT's quality at 60% of its size.
+  </p>
+
+  <h2>MiniLM's twist: imitate the attention, not the answers</h2>
+
+  <p>
+    Microsoft's MiniLM paper asked a sharper question: what is the <em>essence</em> of
+    a transformer worth copying? Their answer: the <strong>self-attention
+    patterns of the last layer</strong> — where the teacher looks, and how its values
+    relate (M5.3's Q·K and V·V similarity grids). The student is trained to reproduce
+    those distributions, not the token predictions. The deep benefit: attention
+    grids are <strong>n×n — architecture-independent</strong>. The student can have
+    different width, fewer heads, fewer layers, and still imitate perfectly — no
+    layer-by-layer size matching (DistilBERT's constraint) required. That freedom is
+    exactly what allowed 6 layers × 384 dims to drink from 12 × 768.
+  </p>
+
+  <figure class="anim" id="fig-distill">
+    <div class="fig-title">Animation · The student copies the teacher's gaze</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-ds-t">
+      <title id="fig-ds-t">Teacher attention pattern guiding a smaller student model</title>
+      <!-- teacher -->
+      <g id="teacher">
+        <rect x="40" y="50" width="240" height="130" rx="14" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+        <text x="160" y="80" text-anchor="middle" font-size="18" fill="#1d4ed8" font-weight="700">teacher: BERT-class</text>
+        <text x="160" y="104" text-anchor="middle" font-size="17" fill="#1d4ed8">12 layers × 768 dims</text>
+        <!-- mini attention grid -->
+        <g id="t-grid">
+          <rect x="100" y="118" width="26" height="26" fill="#1d4ed8"/><rect x="130" y="118" width="26" height="26" fill="#93c5fd"/><rect x="160" y="118" width="26" height="26" fill="#dbeafe"/><rect x="190" y="118" width="26" height="26" fill="#60a5fa"/>
+          <rect x="100" y="148" width="26" height="26" fill="#93c5fd"/><rect x="130" y="148" width="26" height="26" fill="#1d4ed8"/><rect x="160" y="148" width="26" height="26" fill="#60a5fa"/><rect x="190" y="148" width="26" height="26" fill="#dbeafe"/>
+        </g>
+      </g>
+      <!-- student -->
+      <g id="student">
+        <rect x="360" y="50" width="240" height="130" rx="14" fill="#fef3c7" stroke="#fcd34d" stroke-width="2"/>
+        <text x="480" y="80" text-anchor="middle" font-size="18" fill="#b45309" font-weight="700">student: MiniLM</text>
+        <text x="480" y="104" text-anchor="middle" font-size="17" fill="#b45309">6 layers × 384 dims</text>
+        <g id="s-grid">
+          <rect id="s1" x="420" y="118" width="26" height="26" fill="#fde68a"/><rect id="s2" x="450" y="118" width="26" height="26" fill="#fef3c7"/><rect id="s3" x="480" y="118" width="26" height="26" fill="#fcd34d"/><rect id="s4" x="510" y="118" width="26" height="26" fill="#fde68a"/>
+          <rect id="s5" x="420" y="148" width="26" height="26" fill="#fcd34d"/><rect id="s6" x="450" y="148" width="26" height="26" fill="#fde68a"/><rect id="s7" x="480" y="148" width="26" height="26" fill="#fef3c7"/><rect id="s8" x="510" y="148" width="26" height="26" fill="#fde68a"/>
+        </g>
+      </g>
+      <!-- imitation arrow -->
+      <g id="imitate" class="sp-hide">
+        <path d="M 286 115 L 354 115" stroke="#059669" stroke-width="4" marker-end="url(#ds-g)"/>
+        <text x="320" y="100" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">match my</text>
+        <text x="320" y="140" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">attention!</text>
+      </g>
+      <g id="why-grids" class="sp-hide">
+        <rect x="60" y="210" width="520" height="76" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="238" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">the trick: attention grids are n×n — same shape for BOTH models</text>
+        <text x="320" y="262" text-anchor="middle" font-size="17" fill="#64748b">no width/depth matching needed: a 384-dim student can copy a 768-dim</text>
+        <text x="320" y="282" text-anchor="middle" font-size="17" fill="#64748b">teacher's gaze exactly (Q·K and V·V distributions, last layer)</text>
+      </g>
+      <g id="triangle9" class="sp-hide">
+        <rect x="60" y="310" width="520" height="92" rx="12" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="320" y="338" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">the size/speed/quality triangle, settled:</text>
+        <text x="320" y="364" text-anchor="middle" font-size="17" fill="#047857" class="mono">5× faster · ¼ the memory · ~97% of the quality</text>
+        <text x="320" y="390" text-anchor="middle" font-size="17" fill="#047857">that trade is WHY "Mini" — and why it runs on your CPU</text>
+      </g>
+      <defs>
+        <marker id="ds-g" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#059669"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-ds-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-distill svg",
+        caption: "#fig-ds-cap",
+        steps: [
+          { caption: "Teacher and student read the same sentence. The teacher's last-layer attention grid (blue) shows its learned gaze — WHERE meaning flows (M5.4's specialists at work). The student's grid (yellow) starts wrong." },
+          { caption: "The distillation loss: minimize the difference between the two attention distributions (plus the value-similarity grids). The student learns to LOOK like the teacher, token by token.", show: ["#imitate"],
+            attrs: { "#s1": { fill: "#d97706" }, "#s2": { fill: "#fde68a" }, "#s3": { fill: "#fef3c7" }, "#s4": { fill: "#fbbf24" },
+                     "#s5": { fill: "#fde68a" }, "#s6": { fill: "#d97706" }, "#s7": { fill: "#fbbf24" }, "#s8": { fill: "#fef3c7" } }, holdMs: 6400 },
+          { caption: "Why attention specifically: the grids are n×n regardless of model width — a 6×384 student can match a 12×768 teacher's patterns EXACTLY. No dimension-pairing constraints; total architectural freedom for the student.", show: ["#why-grids"], holdMs: 6400 },
+          { caption: "Result: the triangle every deployment negotiates, resolved heavily in your favor. This compressed encoder THEN went through 9.3's billion-pair contrastive training — and became the tool in your requirements.txt.", show: ["#triangle9"], holdMs: 6400 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The name, fully decoded</h2>
+
+  <table>
+    <tr><th>Fragment</th><th>Meaning</th><th>Course page</th></tr>
+    <tr><td><code>all-</code></td><td>trained on ALL 32 datasets / 1.17B pairs of the sentence-transformers project</td><td>9.3</td></tr>
+    <tr><td><code>MiniLM</code></td><td>Microsoft's deep self-attention distillation architecture (this page)</td><td>9.4</td></tr>
+    <tr><td><code>L6</code></td><td>6 encoder blocks — the distilled depth</td><td>5.6</td></tr>
+    <tr><td><code>v2</code></td><td>second training recipe of the community effort</td><td>9.3</td></tr>
+  </table>
+
+  <p>
+    The full lineage, start to finish: BERT-class teacher pretrained with MLM (M6.2) →
+    <strong>attention-distilled</strong> into a 6×384 student (this page) →
+    <strong>contrastively tuned</strong> with MNR over a billion pairs (9.3) →
+    wrapped in the mean-pool + normalize pipeline (9.1) → uploaded, downloaded four
+    hundred million times, and imported by you. Every arrow is now a page you've read.
+    The black box from the course's opening map has no walls left.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      The triangle, measured (CPU, sentences/sec while embedding): MiniLM-L6
+      <strong>~750/s</strong> · MiniLM-L12 ~380/s · BERT-base-class embedders
+      ~150/s · bge-large ~45/s. Retrieval quality (MTEB-style average): L6 ≈
+      <strong>56</strong>, L12 ≈ 57, bge-large ≈ 64. Read the gaps like an engineer:
+      the step from L6 to L12 buys ~1 point for 2× cost; the step to bge-large buys
+      ~8 points for 16× cost. For most RAG corpora under a few million chunks, L6's
+      point on the curve is why it became the default — and now you can justify that
+      default with numbers instead of habit.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Distillation is all around your stack once you see it: DistilBERT (M6.2's
+      family tree), "turbo"/"mini"/"flash" tiers of frontier APIs (widely understood
+      to involve distillation from the flagship), and synthetic-data training
+      ("teacher generates, student learns" — distillation through text instead of
+      logits). The M5.4 fact that 30–50% of attention heads are prunable is the
+      slack distillation exploits: big models are over-provisioned; students keep
+      the essence. Rule of thumb you can now defend: <strong>for a narrow task, a
+      distilled/small model at 1/10th the cost usually beats a giant at the
+      economics that actually matter</strong> (M7.5).
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: measure the triangle on your own hardware</div>
+<pre><code>import time
+from sentence_transformers import SentenceTransformer, util
+
+sents = ["The quick brown fox jumps over the lazy dog."] * 512
+probe = ["How do I reset my password?",
+         "Steps to recover your account login",
+         "Best pasta in Bengaluru"]
+
+for name in ["sentence-transformers/all-MiniLM-L6-v2",
+             "sentence-transformers/all-MiniLM-L12-v2",
+             "sentence-transformers/all-mpnet-base-v2"]:   # the bigger sibling
+    m = SentenceTransformer(name)
+    t0 = time.perf_counter()
+    m.encode(sents, batch_size=64, show_progress_bar=False)
+    speed = len(sents) / (time.perf_counter() - t0)
+    E = m.encode(probe, normalize_embeddings=True)
+    quality_probe = util.cos_sim(E[0], E[1]).item() - util.cos_sim(E[0], E[2]).item()
+    print(f"{name.split('/')[-1]:24s} {speed:6.0f} sent/s | signal gap {quality_probe:.3f}")
+</code></pre>
+    <p>
+      The "signal gap" (related-pair score minus unrelated-pair score) is a
+      one-probe quality proxy; speed is real. You'll see the triangle live: mpnet's
+      gap is a bit wider, its speed a lot lower. Whether that trade is right for
+      YOUR corpus is exactly what next page's proper evaluation decides.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Distillation transfers a big model's competence into a small one via
+    <strong>soft targets</strong>; MiniLM's variant imitates the teacher's
+    <strong>last-layer attention distributions</strong> — n×n and therefore
+    architecture-free, letting 6×384 drink from 12×768. Distill → contrastive-tune →
+    pool → normalize: the complete, open recipe of the model your production system
+    calls a hundred times a minute.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>What is knowledge distillation and why do soft targets beat hard labels?</summary>
+      <div><p>Training a small student to match a large teacher's outputs rather than (only) ground-truth labels. Soft targets — the teacher's full probability distribution — encode inter-class structure ("examined" likely, "treated" plausible, "banana" absurd) that a one-hot label discards; each example therefore carries far more gradient information, letting small models reach ~95–97% of teacher quality. Usually implemented as cross-entropy/KL against temperature-softened teacher distributions, optionally mixed with the true-label loss.</p></div>
+    </details>
+    <details>
+      <summary>What does MiniLM distill specifically, and why is that clever?</summary>
+      <div><p>The last transformer layer's self-attention behavior: the attention distributions (softmax of Q·Kᵀ) and the value-relation distributions (softmax of V·Vᵀ). Cleverness: these are n×n matrices whose shape is independent of hidden size and head count, so the student needs NO architectural correspondence with the teacher — any width/depth can imitate them (unlike hidden-state distillation, which needs projection layers or matched dims). Distilling only the LAST layer also frees the student's lower layers to organize however works best.</p></div>
+    </details>
+    <details>
+      <summary>Walk through all-MiniLM-L6-v2's complete production lineage.</summary>
+      <div><p>(1) Teacher pretrained with masked LM on web text (M6.2). (2) MiniLM deep self-attention distillation compresses it into a 6-layer, 384-dim student (~22.7M params). (3) Sentence-transformers community fine-tunes that student with MultipleNegativesRankingLoss over ~1.17B harvested text pairs, batch 1024 (9.3) — fixing anisotropy and training retrieval geometry. (4) Inference pipeline: WordPiece tokenize → 6 blocks → masked mean pooling → L2 normalize (9.1). Being able to narrate this end-to-end is exactly the "no black boxes" competence.</p></div>
+    </details>
+    <details>
+      <summary>When would you choose a distilled model vs the full-size teacher in production?</summary>
+      <div><p>Distilled wins when: throughput/latency dominate (embedding whole corpora, real-time reranking), CPU/edge deployment, or cost-per-query at scale — the typical 2–5% quality gap is invisible next to a 4–10× serving saving (M7.5's economics). Teacher wins when: the task sits at the student's failure margin (hard domains, subtle ranking), quality is contractual, or volume is too low for savings to matter. The strong answer includes the measurement: run BOTH through your own recall@k eval (9.5) — the generic gap may be bigger or smaller on your data.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>
