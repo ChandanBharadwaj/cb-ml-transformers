@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>T5 &amp; Seq2Seq Revived — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="06-model-families/t5-and-seq2seq-revived">
+<main id="content">
+
+  <h1>T5 &amp; Seq2Seq Revived</h1>
+
+  <p>
+    Short page, deliberately — the third family needs context more than depth. T5
+    (2019) resurrected M4.3's encoder-decoder shape with transformer guts and one
+    radical framing: <strong>every NLP task is text-to-text</strong>. It also ran the
+    field's most systematic bake-off of pretraining choices — receipts worth citing in
+    interviews — and its descendants still quietly run translation and speech systems
+    you use.
+  </p>
+
+  <h2>Everything is text-to-text</h2>
+
+  <figure class="anim" id="fig-t5">
+    <div class="fig-title">Animation · One model, four tasks, zero task heads</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-t5-t">
+      <title id="fig-t5-t">T5 handling multiple tasks via text prefixes</title>
+      <!-- model box -->
+      <g id="model">
+        <rect x="240" y="140" width="160" height="90" rx="14" fill="#1e293b"/>
+        <text x="320" y="180" text-anchor="middle" font-size="18" fill="#fff" font-weight="700">T5</text>
+        <text x="320" y="205" text-anchor="middle" font-size="17" fill="#94a3b8">enc + dec (M5.8)</text>
+      </g>
+      <!-- task 1 -->
+      <g id="t1" class="mono">
+        <rect x="20" y="40" width="330" height="38" rx="9" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="30" y="65" font-size="17" fill="#1d4ed8">translate En to De: That is good.</text>
+        <rect x="420" y="40" width="200" height="38" rx="9" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="430" y="65" font-size="17" fill="#047857">Das ist gut.</text>
+      </g>
+      <!-- task 2 -->
+      <g id="t2" class="sp-hide mono">
+        <rect x="20" y="92" width="330" height="38" rx="9" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="30" y="117" font-size="17" fill="#1d4ed8">summarize: (long article...)</text>
+        <rect x="420" y="92" width="200" height="38" rx="9" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="430" y="117" font-size="17" fill="#047857">(three sentences)</text>
+      </g>
+      <!-- task 3 -->
+      <g id="t3" class="sp-hide mono">
+        <rect x="20" y="262" width="330" height="38" rx="9" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="30" y="287" font-size="17" fill="#1d4ed8">cola sentence: The car quickly.</text>
+        <rect x="420" y="262" width="200" height="38" rx="9" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="430" y="287" font-size="17" fill="#047857">unacceptable</text>
+      </g>
+      <!-- task 4 -->
+      <g id="t4" class="sp-hide mono">
+        <rect x="20" y="314" width="330" height="38" rx="9" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="30" y="339" font-size="17" fill="#1d4ed8">stsb sentence1:... sentence2:...</text>
+        <rect x="420" y="314" width="200" height="38" rx="9" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="430" y="339" font-size="17" fill="#047857">3.8</text>
+      </g>
+      <g id="punch5" class="sp-hide">
+        <text x="320" y="250" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">even classification and regression answer AS TEXT</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-t5-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-t5 svg",
+        caption: "#fig-t5-cap",
+        steps: [
+          { caption: "A task prefix in the input text tells the model what to do — 'translate En to De:' — and the answer comes out as text." },
+          { caption: "Summarization: same model, different prefix. No task-specific heads, no architecture changes.", show: ["#t2"] },
+          { caption: "Grammar judgment — a CLASSIFICATION task — answered as the literal string 'unacceptable'.", show: ["#t3", "#punch5"] },
+          { caption: "Even similarity REGRESSION outputs the digits '3.8' as tokens. Radical uniformity: one model, one loss, one decoding procedure for everything. Sound familiar? Prompting an LLM with instructions is this idea, generalized — T5 was the rehearsal.", show: ["#t4"], holdMs: 6200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Span corruption, and the great bake-off</h2>
+
+  <p>
+    T5's pretraining objective sits between BERT's and GPT's: mask out random
+    <strong>spans</strong> (not single tokens) with sentinel markers, and train the
+    decoder to regenerate just the missing spans —
+    <code>"Thank you &lt;X&gt; me to your party &lt;Y&gt; week"</code> →
+    <code>"&lt;X&gt; for inviting &lt;Y&gt; last"</code>. The paper's larger
+    contribution was methodological: it systematically compared objectives (LM vs
+    MLM vs span corruption), architectures, data sizes and fine-tuning schemes under
+    one budget. Two conclusions to carry: <strong>denoising objectives beat plain LM
+    for downstream fine-tuning at that scale</strong>, and <strong>most clever
+    variations mattered less than scale and data quality</strong> — an early rhyme of
+    M7.4's scaling laws.
+  </p>
+
+  <h2>Where enc-dec survives, and why decoders still won</h2>
+
+  <p>
+    Encoder-decoder remains the right tool where the input deserves full bidirectional
+    reading and the output is a faithful transform: <strong>translation</strong>
+    (production systems), <strong>Whisper</strong> (audio encoder → text decoder),
+    <strong>BART</strong>-style summarization, and — a fact worth knowing —
+    <strong>Flan-T5</strong> remained the best instruction-following model per
+    parameter for years. But the general race went decoder-only (M5.8's four reasons:
+    universality, objective simplicity, in-context learning, serving economics).
+    T5's text-to-text vision won culturally even as its architecture lost the
+    scale race: "everything is a prompt, every answer is text" <em>is</em> the
+    modern interface.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      T5 sizes: Small 60M → Base 220M (≈ BERT-base + GPT-2-small stapled together) →
+      XXL 11B. Trained on C4 — 750GB of cleaned CommonCrawl the paper open-sourced,
+      which became the seed of many later corpora (FineWeb, from M6.1's build, is a
+      descendant). Whisper, the enc-dec you've most likely used this week: 1.5B params,
+      680k hours of audio — cross-attention (M5.8) letting text tokens attend over
+      audio frames.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      T5's fingerprints on your daily tools: the ▁-prefixed tokens you may have seen in
+      HF tokenizer dumps are its SentencePiece legacy (M5.1); "instruction: … output: …"
+      dataset formats descend from its task prefixes; and if your product ever
+      transcribes audio, cross-attention from this family is doing the work. Course
+      position check: you now hold all three silhouettes with their native objectives —
+      MLM/encoder, causal/decoder, span-corruption/enc-dec. The families are complete;
+      next page is the field guide for choosing among their descendants.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: drive T5's prefixes yourself</div>
+<pre><code>from transformers import pipeline
+
+t5 = pipeline("text2text-generation", model="google/flan-t5-base")
+
+for prompt in [
+    "Translate English to German: The house is wonderful.",
+    "Summarize: The transformer architecture, introduced in 2017, replaced "
+    "recurrent networks by using attention to process all tokens in parallel, "
+    "enabling much larger models and faster training on modern hardware.",
+    "Is this sentence grammatical? 'The car drove quickly street.'",
+    "Answer: What is the capital of Karnataka?",
+]:
+    print("\n>", prompt[:60], "...")
+    print(" ", t5(prompt, max_new_tokens=40)[0]["generated_text"])
+</code></pre>
+    <p>
+      Flan-T5-base: 220M parameters — 1/800th of GPT-3 — following instructions
+      credibly on CPU. Worth experiencing to calibrate "how much model does my task
+      actually need?", a question M8.6 turns into a decision framework.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    T5 = the M5.8 encoder-decoder + span-corruption pretraining + one big idea:
+    <strong>every task is text-to-text</strong>. The architecture now specializes
+    (translation, Whisper); the idea became the industry's interface. And its bake-off
+    left the receipts: objectives matter some, scale and data matter more.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>What is span corruption and how does it differ from BERT's MLM?</summary>
+      <div><p>Contiguous spans (mean length ~3) are replaced by single sentinel tokens, and the decoder generates the concatenated missing spans autoregressively. Differences from MLM: targets are generated as a sequence (training the decoder properly), spans are harder than isolated tokens (more context integration), and the output is shorter than the input (efficient). It's a denoising objective adapted to the enc-dec shape — same family as BART's corruptions.</p></div>
+    </details>
+    <details>
+      <summary>What did the T5 paper's systematic study conclude, roughly?</summary>
+      <div><p>Under controlled budgets: denoising/span objectives beat plain LM for fine-tuned downstream quality; encoder-decoder with shared vocab was strong for text-to-text; most architectural/objective tweaks yielded marginal gains compared to scaling model, data and training — foreshadowing scaling laws. Its enduring artifacts: the C4 corpus and the text-to-text framing. Citing "T5's ablations showed recipe &lt; scale" is a compact, credible interview move.</p></div>
+    </details>
+    <details>
+      <summary>Why does Whisper use an encoder-decoder rather than decoder-only?</summary>
+      <div><p>The input (audio) is a complete, fixed signal deserving full bidirectional encoding — there's no causality constraint on listening. The decoder then generates text attending over those audio representations via cross-attention. Decoder-only would force audio through the same causal stream as text, wasting the ability to hear the whole utterance before writing. General rule: when input and output are different modalities or the input is fully available upfront, enc-dec is natural.</p></div>
+    </details>
+    <details>
+      <summary>Did T5's "text-to-text" idea win or lose?</summary>
+      <div><p>Both, instructively: the architecture lost the general-purpose race to decoder-only (M5.8's economics), but the interface won completely — modern LLM usage ("instruction in, text out", classification answered as words, numbers as digits) is T5's framing executed by a different architecture. Flan-T5 also proved instruction tuning's power per parameter before it was standard. Good answer-shape for interviews: separate the fate of the idea from the fate of the implementation.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

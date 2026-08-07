@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scaling Laws &amp; Chinchilla — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="07-compute-and-scale/scaling-laws-and-chinchilla">
+<main id="content">
+
+  <h1>Scaling Laws &amp; Chinchilla</h1>
+
+  <p>
+    The strangest empirical fact in modern AI: model quality improves with scale in a
+    way you can <strong>draw a ruler through</strong>. Loss versus parameters, data, or
+    compute — on log-log axes, straight lines, holding across seven orders of
+    magnitude. This page covers the lines, the famous correction (Chinchilla) that
+    embarrassed a generation of models, why today's models deliberately "overtrain"
+    past that optimum, and the debate about capabilities that seem to appear suddenly.
+  </p>
+
+  <h2>The lines: loss is predictable</h2>
+
+  <figure class="anim" id="fig-laws">
+    <div class="fig-title">Animation · The ruler through seven orders of magnitude</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-lw-t">
+      <title id="fig-lw-t">Log-log scaling of loss versus compute with extrapolation</title>
+      <line x1="70" y1="310" x2="600" y2="310" stroke="#cbd5e1" stroke-width="2.5"/>
+      <line x1="70" y1="50" x2="70" y2="310" stroke="#cbd5e1" stroke-width="2.5"/>
+      <text x="335" y="342" text-anchor="middle" font-size="17" fill="#64748b">compute (log scale) →</text>
+      <text x="44" y="180" text-anchor="middle" font-size="17" fill="#64748b" transform="rotate(-90 44 180)">loss (log)</text>
+      <!-- data points -->
+      <g id="pts7">
+        <circle cx="110" cy="120" r="7" class="sv-a"/>
+        <circle cx="180" cy="150" r="7" class="sv-a"/>
+        <circle cx="250" cy="178" r="7" class="sv-a"/>
+        <circle cx="320" cy="205" r="7" class="sv-a"/>
+        <circle cx="390" cy="231" r="7" class="sv-a"/>
+      </g>
+      <g id="ruler" class="sp-hide">
+        <line x1="90" y1="112" x2="410" y2="240" stroke="#2563eb" stroke-width="3"/>
+        <text x="200" y="110" font-size="17" fill="#1d4ed8" font-weight="700">a power law: loss ∝ compute^(−α)</text>
+      </g>
+      <g id="extrap" class="sp-hide">
+        <line x1="410" y1="240" x2="580" y2="308" stroke="#2563eb" stroke-width="3" stroke-dasharray="9 6"/>
+        <circle cx="560" cy="300" r="9" fill="none" stroke="#dc2626" stroke-width="3"/>
+        <text x="470" y="280" font-size="17" fill="#dc2626" font-weight="700">predicted BEFORE spending $100M</text>
+      </g>
+      <g id="meaning" class="sp-hide">
+        <rect x="90" y="40" width="470" height="40" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="325" y="66" text-anchor="middle" font-size="17" fill="#92400e" font-weight="700">10× compute → reliably lower loss. No plateau found yet.</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-lw-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-laws svg",
+        caption: "#fig-lw-cap",
+        steps: [
+          { caption: "Train models of many sizes, plot final loss vs training compute — on log-log axes. Each dot is a full training run." },
+          { caption: "They fall on a straight line: a power law. Kaplan et al. (2020) showed this holds across ~7 orders of magnitude, for params, data, and compute alike.", show: ["#ruler"] },
+          { caption: "The industrial consequence: you can extrapolate. Train small models cheaply, fit the line, and PREDICT the loss of a run costing $100M before committing. Frontier labs literally budget this way.", show: ["#extrap"] },
+          { caption: "And the line hasn't bent yet. 'Scale is all you need' became strategy because the ruler kept working — GPT-3 (M6.3) was this chart, weaponized.", show: ["#meaning"], holdMs: 6200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Chinchilla: the ratio everyone had wrong</h2>
+
+  <p>
+    Given a fixed compute budget, you choose: bigger model on less data, or smaller
+    model on more data? (Compute ≈ 6 × params × tokens — the constraint line.)
+    Kaplan-era wisdom said favor parameters, so GPT-3 went 175B params on just 300B
+    tokens. DeepMind's <strong>Chinchilla</strong> paper (2022) redid the measurement
+    carefully and found the optimum at roughly <strong>~20 tokens per parameter</strong>
+    — meaning GPT-3 should have been ¼ the size on 4× the data. Their proof:
+    Chinchilla, 70B on 1.4T tokens, <em>same compute</em> as the 280B Gopher —
+    and better at everything. An entire generation of models turned out to be
+    <strong>oversized and undertrained</strong>.
+  </p>
+
+  <figure class="anim" id="fig-chin">
+    <div class="fig-title">Animation · Same budget, two allocations</div>
+    <svg viewBox="0 0 640 340" aria-labelledby="fig-ch-t">
+      <title id="fig-ch-t">Compute budget split between parameters and tokens</title>
+      <text x="320" y="42" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">one fixed budget: compute ≈ 6 × params × tokens</text>
+      <!-- gopher -->
+      <g id="gopher">
+        <rect x="60" y="70" width="220" height="110" rx="12" fill="#fee2e2" stroke="#fca5a5" stroke-width="2"/>
+        <text x="170" y="100" text-anchor="middle" font-size="18" fill="#b91c1c" font-weight="700">Gopher: 280B params</text>
+        <text x="170" y="128" text-anchor="middle" font-size="17" fill="#b91c1c">× 300B tokens</text>
+        <text x="170" y="160" text-anchor="middle" font-size="17" fill="#64748b">huge, barely educated</text>
+      </g>
+      <g id="chin" class="sp-hide">
+        <rect x="360" y="70" width="220" height="110" rx="12" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+        <text x="470" y="100" text-anchor="middle" font-size="18" fill="#047857" font-weight="700">Chinchilla: 70B params</text>
+        <text x="470" y="128" text-anchor="middle" font-size="17" fill="#047857">× 1.4T tokens</text>
+        <text x="470" y="160" text-anchor="middle" font-size="17" fill="#64748b">smaller, deeply educated</text>
+      </g>
+      <g id="verdict7" class="sp-hide">
+        <rect x="130" y="210" width="380" height="46" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="320" y="240" text-anchor="middle" font-size="18" fill="#1d4ed8" font-weight="700">same cost — Chinchilla wins every benchmark</text>
+      </g>
+      <g id="rule20" class="sp-hide">
+        <text x="320" y="300" text-anchor="middle" font-size="18" fill="#b45309" font-weight="700">compute-optimal ratio: ≈ 20 training tokens per parameter</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-ch-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-chin svg",
+        caption: "#fig-ch-cap",
+        steps: [
+          { caption: "2021's state of the art: Gopher spent its budget on parameters — a 280B giant fed only 300B tokens (≈1 token per param). A brilliant student who skipped most of school." },
+          { caption: "Chinchilla, same exact budget, rebalanced: ¼ the parameters, ~5× the tokens (20:1 ratio).", show: ["#chin"] },
+          { caption: "Result: the smaller model won across the board. 'Bigger is better' became 'better-fed is better' overnight.", show: ["#verdict7"] },
+          { caption: "The 20-tokens-per-parameter rule became the field's north star for compute-optimal training — and then, interestingly, everyone started deliberately violating it. Next section.", show: ["#rule20"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Why modern models "overtrain" past Chinchilla</h2>
+
+  <p>
+    Llama-3-8B trained on 15T tokens — <strong>1,875 tokens per parameter</strong>,
+    ~90× the Chinchilla ratio. Waste? No: Chinchilla optimizes <em>training</em>
+    compute only. But a model is trained once and <strong>served billions of
+    times</strong> — and serving cost scales with parameters (M7.2, M7.5). Overtraining
+    a small model spends extra training compute to buy a cheaper-forever inference
+    artifact: an 8B that punches above its weight beats a Chinchilla-optimal 30B that
+    costs 4× per query. The optimum moved because the objective did — from "best model
+    per training dollar" to "best model per <em>lifetime</em> dollar." That's also the
+    honest economics behind the small-but-great model wave (Phi, Qwen-small, Llama-8B)
+    you deploy from.
+  </p>
+
+  <h2>Emergence: real jumps, or measurement artifacts?</h2>
+
+  <p>
+    While <em>loss</em> scales smoothly, specific <em>capabilities</em> often appear
+    suddenly: arithmetic, in-context learning (M6.3), instruction-following — near-zero
+    below some scale, then rapidly present. Two readings, both worth knowing:
+    <strong>Emergence is real</strong> — some skills need enough sub-components in
+    place before working at all (a lock needs every pin). <strong>Emergence is partly
+    an artifact</strong> — a 2023 Stanford analysis showed many "jumps" reflect
+    all-or-nothing <em>metrics</em> (exact-match arithmetic scores 0 until every digit
+    is right) while underlying per-token likelihoods improve smoothly; smoother metrics
+    smooth the curves. Practical stance: capabilities do arrive with scale and are hard
+    to predict individually — but treat dramatic "phase transition" claims with M3.6's
+    metric-skepticism.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      The ratio across eras: GPT-3 175B ÷ 300B tokens ≈ <strong>1.7 tok/param</strong>
+      (starved) · Chinchilla 70B ÷ 1.4T = <strong>20</strong> (optimal) ·
+      Llama-3-8B ÷ 15T = <strong>1,875</strong> (deliberately overtrained for cheap
+      serving). Budget math you can now do: at ~6·N·D FLOPs, Llama-3-8B's pretraining ≈
+      6 × 8e9 × 15e12 ≈ <strong>7×10²³ FLOPs</strong>; on H100s at ~40% utilization
+      that's ~1.3M GPU-hours — a few thousand GPUs for a few weeks, matching Meta's
+      disclosures. Scaling laws turned model planning into spreadsheet engineering.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      This page explains model-picker economics you navigate weekly: why providers
+      offer small/medium/frontier tiers (points along the lines at different
+      lifetime-cost targets), why small models keep getting shockingly good (the
+      overtraining play), and why M6.3's GPT-2 failed your arithmetic prompt while
+      modern models pass it (capability-arrival with scale). When a vendor says
+      "our 8B matches last year's 70B," you now know the two levers that make that
+      sentence possible: more tokens per parameter, better tokens.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: fit a scaling law with your own ruler</div>
+<pre><code>import numpy as np
+
+# published-ish (compute FLOPs, loss) points — the kind labs fit
+runs = [(1e19, 3.40), (1e20, 3.07), (1e21, 2.77), (1e22, 2.50), (1e23, 2.26)]
+
+logC = np.log10([r[0] for r in runs])
+logL = np.log10([r[1] for r in runs])
+alpha, b = np.polyfit(logC, logL, 1)           # straight line in log-log
+print(f"loss ≈ {10**b:.2f} · C^{alpha:.3f}")
+
+# extrapolate a 10× bigger run BEFORE paying for it:
+C_next = 1e24
+pred = 10**b * C_next**alpha
+print(f"predicted loss at 1e24 FLOPs: {pred:.2f}")
+print(f"perplexity (M4.1!): {np.e**pred:.1f}")   # loss → hesitation-width
+</code></pre>
+    <p>
+      Five points, one polyfit — you just did what frontier labs do with their pilot
+      runs. Change one input loss by 0.1 and watch the extrapolation move: the
+      sensitivity you feel is why labs run <em>many</em> small runs before believing
+      the ruler with nine figures of budget.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Loss follows <strong>power laws</strong> in params, data, and compute — predictable
+    enough to budget $100M runs from small pilots. <strong>Chinchilla</strong>: at
+    fixed training compute, ~20 tokens/param is optimal — but modern models overtrain
+    far past it because inference, not training, dominates lifetime cost.
+    Capabilities arrive with scale — sometimes genuinely suddenly, sometimes just
+    measured suddenly. Scale is a strategy because the ruler keeps working.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>What are neural scaling laws and why did they reorganize the field?</summary>
+      <div><p>Empirical power-law relationships: LM loss decreases predictably as a function of parameters, dataset size, and compute (straight lines on log-log axes, holding over many orders of magnitude). Consequences: capability became purchasable and predictable — labs could extrapolate a giant run's loss from cheap pilots, justifying massive investments (GPT-3 was the bet that the line continues); research priorities shifted from architecture novelty toward scale, data and efficiency. They're empirical regularities, not derived theory — but they've held remarkably.</p></div>
+    </details>
+    <details>
+      <summary>State the Chinchilla result and its practical rule.</summary>
+      <div><p>For a fixed training-compute budget (≈6·N·D FLOPs), loss is minimized by scaling parameters N and tokens D together, at roughly D ≈ 20N — not by maximizing N as earlier work suggested. Demonstration: Chinchilla-70B (1.4T tokens) beat Gopher-280B (300B tokens) at equal compute. Rule: a compute-optimal 10B model wants ~200B training tokens. It reframed GPT-3-era models as undertrained.</p></div>
+    </details>
+    <details>
+      <summary>Why do current models train far beyond the Chinchilla-optimal ratio?</summary>
+      <div><p>Chinchilla optimizes training cost alone; production optimizes lifetime cost = training + (inference × billions of queries), and inference scales with parameter count. Overtraining a smaller model (Llama-3-8B: ~1,875 tok/param) sacrifices training-compute efficiency to produce an artifact that's cheaper at every future query, easier to deploy (fits smaller GPUs, M7.2), and faster (latency). The optimum shifted because the objective did — an excellent example of ML economics overriding ML theory.</p></div>
+    </details>
+    <details>
+      <summary>Is "emergence" of capabilities real? Give the two-sided answer.</summary>
+      <div><p>Observed: certain capabilities (multi-step arithmetic, ICL, instruction-following) go from ~absent to present over a modest scale range while loss improves smoothly. Skeptical side (Schaeffer et al. 2023): many sharp jumps are artifacts of discontinuous metrics — exact-match scoring hides smooth per-token improvement; with continuous metrics, curves flatten. Synthesis: underlying competence accrues smoothly, but thresholded task success (which is what users experience) can genuinely switch on abruptly — so emergence is real at the product level even where it's smooth at the loss level. Both halves stated = strong answer.</p></div>
+    </details>
+    <details>
+      <summary>Estimate training FLOPs for a 8B model on 15T tokens, and rough GPU time.</summary>
+      <div><p>Rule: ≈6 × N × D = 6 × 8e9 × 1.5e13 ≈ 7.2×10²³ FLOPs. An H100 delivers ~1e15 FLOP/s at ~40% utilization → ~4e14 effective; 7.2e23 / 4e14 ≈ 1.8e9 GPU-seconds ≈ 500k–1.5M GPU-hours depending on utilization — i.e., a few thousand GPUs for several weeks. Knowing the 6ND rule and utilization reality (30–50%) lets you sanity-check any training-cost claim in a meeting, which is exactly why interviewers ask it.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Training at Scale — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="07-compute-and-scale/training-at-scale">
+<main id="content">
+
+  <h1>Training at Scale</h1>
+
+  <p>
+    Last page ended with a model that can't fit on one GPU. This page is the toolkit
+    that trains it anyway — the four memory tricks you'll actually use on single
+    machines, and the three parallelism strategies (in intuitions, not frameworks)
+    that let 16,000 GPUs act as one. None of it is exotic once you see each trick as
+    an answer to "which bar of the memory bill are we dodging?"
+  </p>
+
+  <h2>The single-GPU survival kit</h2>
+
+  <p>
+    <strong>Mixed precision</strong>: do the heavy math in bf16 (2 bytes, huge speedup
+    on tensor cores), keep an fp32 master copy of weights for stable accumulation of
+    tiny updates — the +28 GB bar from last page, purchased deliberately because bf16
+    matmuls are 2–4× faster. (bf16 vs fp16 detail worth knowing: bf16 keeps fp32's
+    exponent range, so no loss-scaling gymnastics — it's why everyone switched.)
+    <strong>Gradient accumulation</strong>: can only fit batch 4, but want batch 64's
+    smooth gradients (M3.3)? Run 16 micro-batches, summing gradients, step once —
+    identical math to big-batch training, paid in time instead of memory.
+    <strong>Gradient checkpointing</strong>: don't cache every activation; recompute
+    them during backward — ~30% more compute, activations bar shrinks dramatically.
+    These three are checkboxes in every HF Trainer config; now they're decisions
+    instead of incantations.
+  </p>
+
+  <h2>Beyond one GPU: three ways to split the work</h2>
+
+  <figure class="anim" id="fig-par">
+    <div class="fig-title">Animation · Data, tensor, and pipeline parallelism</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-pp-t">
+      <title id="fig-pp-t">Three parallelism strategies over four GPUs</title>
+      <!-- data parallel -->
+      <g id="dp">
+        <text x="30" y="44" font-size="18" class="sv-ink" font-weight="700">① data parallel — copy the model, split the batch</text>
+        <g>
+          <rect x="30"  y="58" width="130" height="52" rx="10" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+          <rect x="180" y="58" width="130" height="52" rx="10" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+          <rect x="330" y="58" width="130" height="52" rx="10" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+          <rect x="480" y="58" width="130" height="52" rx="10" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+          <text x="95"  y="82" text-anchor="middle" font-size="17" fill="#1d4ed8">full model</text>
+          <text x="245" y="82" text-anchor="middle" font-size="17" fill="#1d4ed8">full model</text>
+          <text x="395" y="82" text-anchor="middle" font-size="17" fill="#1d4ed8">full model</text>
+          <text x="545" y="82" text-anchor="middle" font-size="17" fill="#1d4ed8">full model</text>
+          <text x="95"  y="102" text-anchor="middle" font-size="17" fill="#64748b">batch ¼</text>
+          <text x="245" y="102" text-anchor="middle" font-size="17" fill="#64748b">batch ¼</text>
+          <text x="395" y="102" text-anchor="middle" font-size="17" fill="#64748b">batch ¼</text>
+          <text x="545" y="102" text-anchor="middle" font-size="17" fill="#64748b">batch ¼</text>
+        </g>
+      </g>
+      <!-- tensor parallel -->
+      <g id="tp" class="sp-hide">
+        <text x="30" y="164" font-size="18" class="sv-ink" font-weight="700">② tensor parallel — split every MATRIX across GPUs</text>
+        <rect x="30" y="178" width="580" height="56" rx="10" fill="#fef3c7" stroke="#fcd34d" stroke-width="2"/>
+        <line x1="175" y1="178" x2="175" y2="234" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"/>
+        <line x1="320" y1="178" x2="320" y2="234" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"/>
+        <line x1="465" y1="178" x2="465" y2="234" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="102" y="210" text-anchor="middle" font-size="17" fill="#b45309">W[:, 0:¼]</text>
+        <text x="247" y="210" text-anchor="middle" font-size="17" fill="#b45309">W[:, ¼:½]</text>
+        <text x="392" y="210" text-anchor="middle" font-size="17" fill="#b45309">W[:, ½:¾]</text>
+        <text x="537" y="210" text-anchor="middle" font-size="17" fill="#b45309">W[:, ¾:1]</text>
+        <text x="320" y="256" text-anchor="middle" font-size="17" fill="#64748b">each GPU computes a slice of every matmul — constant chatter, needs fast links</text>
+      </g>
+      <!-- pipeline parallel -->
+      <g id="pp" class="sp-hide">
+        <text x="30" y="300" font-size="18" class="sv-ink" font-weight="700">③ pipeline parallel — split the LAYERS across GPUs</text>
+        <g>
+          <rect x="30"  y="314" width="130" height="52" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+          <rect x="180" y="314" width="130" height="52" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+          <rect x="330" y="314" width="130" height="52" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+          <rect x="480" y="314" width="130" height="52" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+          <text x="95"  y="345" text-anchor="middle" font-size="17" fill="#047857">layers 1–8</text>
+          <text x="245" y="345" text-anchor="middle" font-size="17" fill="#047857">layers 9–16</text>
+          <text x="395" y="345" text-anchor="middle" font-size="17" fill="#047857">layers 17–24</text>
+          <text x="545" y="345" text-anchor="middle" font-size="17" fill="#047857">layers 25–32</text>
+        </g>
+        <line x1="162" y1="340" x2="176" y2="340" stroke="#059669" stroke-width="3" marker-end="url(#ts-g)"/>
+        <line x1="312" y1="340" x2="326" y2="340" stroke="#059669" stroke-width="3" marker-end="url(#ts-g)"/>
+        <line x1="462" y1="340" x2="476" y2="340" stroke="#059669" stroke-width="3" marker-end="url(#ts-g)"/>
+        <text x="320" y="392" text-anchor="middle" font-size="17" fill="#64748b">activations flow station-to-station; micro-batches keep all stations busy</text>
+      </g>
+      <defs>
+        <marker id="ts-g" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#059669"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-pp-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-par svg",
+        caption: "#fig-pp-cap",
+        steps: [
+          { caption: "① Data parallel: every GPU holds the FULL model; the batch splits four ways; after backward, gradients are averaged across GPUs and everyone steps identically. Simple, scales beautifully — but only if the model fits on one GPU. (ZeRO/FSDP refine this by also sharding optimizer state and weights across the copies.)", holdMs: 6600 },
+          { caption: "② Tensor parallel: the model DOESN'T fit — so split every weight matrix itself; each GPU computes its slice of every matmul (M1.3: columns of W are independent!). Requires blazing interconnect (NVLink) since GPUs exchange partial results constantly — used within a single machine.", show: ["#tp"], holdMs: 6600 },
+          { caption: "③ Pipeline parallel: split by LAYERS — an assembly line where activations flow station to station. Micro-batches stream through so stations don't idle ('bubble' minimization). Used across machines, where links are slower.", show: ["#pp"], holdMs: 6200 }
+        ]
+      });
+    });
+  </script>
+
+  <p>
+    Frontier training composes all three — "3D parallelism": tensor-parallel inside a
+    node (8 GPUs, NVLink), pipeline across nodes, data-parallel across the whole fleet,
+    plus the single-GPU kit everywhere. You will likely never configure this by hand
+    (FSDP/DeepSpeed/Megatron do), but knowing the three axes makes every infrastructure
+    conversation and paper legible.
+  </p>
+
+  <h2>What a real training run looks like</h2>
+
+  <p>
+    Not a smooth loss curve — a <em>campaign</em>: checkpoints written every few
+    hours (a 70B checkpoint is ~1 TB with optimizer state — even saving is
+    engineering); <strong>loss spikes</strong> where training destabilizes (responses:
+    skip the bad batch, restore checkpoint, sometimes lower LR); hardware failures
+    as routine (at 16,000 GPUs, several fail <em>daily</em> — automated
+    detect-restart-resume is core infrastructure); and a data curriculum (mixture
+    ratios sometimes shifted late in training — more code/high-quality text near the
+    end). The published "loss curve" is the cleaned-up autobiography of months of
+    firefighting.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Llama-3.1-405B's disclosed campaign: <strong>~16,000 H100s</strong>,
+      54 days for the main run, with a published finding that hardware failures
+      caused ~<strong>466 job interruptions</strong> — one every ~3 hours, 78% from
+      GPU/HBM faults. Compute ≈ 3.8×10²⁵ FLOPs; power draw of the fleet ≈ a small
+      town. Meanwhile your side of the economy: QLoRA fine-tuning 8B on one 24 GB
+      card uses every single-GPU trick on this page — mixed precision, accumulation,
+      checkpointing — via three lines of Trainer config. Same physics, twelve orders
+      of magnitude apart.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Config archaeology you can now perform: <code>bf16=True</code> (mixed precision),
+      <code>gradient_accumulation_steps=8</code> (big-batch math on small VRAM),
+      <code>gradient_checkpointing=True</code> (the activations bar, traded for
+      compute) — the three checkboxes in every fine-tuning tutorial you've ever
+      skimmed are this page's survival kit. And when M9.5 has you fine-tune MiniLM,
+      note the luxury: at 22M parameters, none of this is needed. Model size decides
+      which chapter of this page applies to you.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: gradient accumulation, proven identical</div>
+<pre><code>import torch, torch.nn as nn
+
+torch.manual_seed(0)
+model_a = nn.Linear(10, 1)
+model_b = nn.Linear(10, 1)
+model_b.load_state_dict(model_a.state_dict())      # identical twins
+X, y = torch.randn(64, 10), torch.randn(64, 1)
+loss_fn = nn.MSELoss()
+
+# A: one big batch of 64
+loss_fn(model_a(X), y).backward()
+
+# B: 8 micro-batches of 8, gradients accumulating
+for i in range(8):
+    xb, yb = X[i*8:(i+1)*8], y[i*8:(i+1)*8]
+    (loss_fn(model_b(xb), yb) / 8).backward()       # note the /8 — mean of means
+
+print(torch.allclose(model_a.weight.grad, model_b.weight.grad, atol=1e-6))  # True
+</code></pre>
+    <p>
+      <code>True</code>: eight small backward passes, summed, equal one big one —
+      because gradients are averages and averages decompose (that's also why data
+      parallelism works: the gradient all-reduce across GPUs is this same identity,
+      distributed). One assert, two of this page's tricks demystified.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Single GPU: <strong>mixed precision + gradient accumulation + checkpointing</strong> —
+    speed, effective batch, and memory, each traded consciously. Many GPUs:
+    <strong>data parallel</strong> (copy model, split batch), <strong>tensor
+    parallel</strong> (split matrices, needs fast links), <strong>pipeline
+    parallel</strong> (split layers, assembly line) — composed as 3D at the frontier.
+    And real training runs are campaigns with checkpoints, spikes and daily hardware
+    funerals, not smooth curves.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Explain the three parallelism strategies and when each applies.</summary>
+      <div><p>Data parallel: replicate the model, split the batch, all-reduce gradients — default whenever the model fits per-GPU; ZeRO/FSDP extend it by sharding optimizer state/gradients/weights across replicas. Tensor parallel: shard individual weight matrices; every matmul becomes a collective operation — needed when layers themselves don't fit, viable only over NVLink-class interconnects (within a node). Pipeline parallel: assign contiguous layer ranges to GPUs, stream micro-batches to fill the assembly line — spans nodes where links are slower; costs "bubble" idle time. Frontier runs compose all three (3D parallelism).</p></div>
+    </details>
+    <details>
+      <summary>Mixed precision: what's actually stored in what, and why bf16 over fp16?</summary>
+      <div><p>Compute (matmuls, activations) in 16-bit; weights also kept as an fp32 master copy that the optimizer updates — because per-step updates (lr × grad ≈ 1e-7 × values) underflow 16-bit accumulation. bf16 keeps fp32's 8-bit exponent (same range, less mantissa), so it tolerates large/small values without the loss-scaling machinery fp16 needs — fewer failure modes, hence the industry default on A100+/TPUs. Memory irony: mixed precision INCREASES weight-related memory (16-bit + 32-bit copies) — you pay memory for speed.</p></div>
+    </details>
+    <details>
+      <summary>Gradient accumulation vs bigger batch — mathematically identical? Any gotchas?</summary>
+      <div><p>Identical for the gradient itself: sum/mean of micro-batch gradients equals the big-batch gradient (linearity), as the 12-line proof shows. Gotchas: divide each micro-loss by accumulation steps (or average at the end); BatchNorm statistics differ per micro-batch (rarely relevant in transformers — LayerNorm is per-token, M5.5); some LR schedules/logging count steps differently; and wall-clock is longer (serial micro-batches). It buys batch smoothness, not throughput.</p></div>
+    </details>
+    <details>
+      <summary>Why is gradient checkpointing a compute-for-memory trade and when is it worth it?</summary>
+      <div><p>Backprop needs forward activations (M3.4); checkpointing stores them only at layer boundaries every √L layers and recomputes the rest during backward — activation memory drops ~√L-fold for roughly one extra forward pass (~30% compute). Worth it when activations dominate the memory bill: long sequences, big batches, large models on small cards — i.e., almost every consumer-GPU fine-tune. Not worth it when compute-bound with memory to spare.</p></div>
+    </details>
+    <details>
+      <summary>What makes frontier-scale training an infrastructure problem, not just an ML problem?</summary>
+      <div><p>At 10k+ GPUs: MTBF arithmetic makes failures continuous (Llama-3's ~466 interruptions in 54 days), demanding automated checkpoint/resume; checkpoints are terabytes (storage bandwidth becomes a bottleneck); network topology dictates the parallelism layout; loss spikes require automated detection and batch-skipping; and data pipelines must feed millions of tokens/sec. The ML (architecture, objective) is settled before launch — the campaign is distributed-systems engineering. Recognizing this division is what the question tests.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

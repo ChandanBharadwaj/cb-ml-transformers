@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Instruction Tuning (SFT) — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="08-fine-tuning/instruction-tuning-sft">
+<main id="content">
+
+  <h1>Instruction Tuning (SFT)</h1>
+
+  <p>
+    The page that explains the difference between GPT-3 and ChatGPT. A base model
+    (M6.3) is a brilliant text-continuer with no concept of being spoken <em>to</em>.
+    <strong>Supervised fine-tuning (SFT)</strong> on (instruction, response) pairs is
+    what converts it into something that answers — and the chat template it learns is
+    literally what your API calls serialize into. After this page, "system prompt"
+    stops being folklore.
+  </p>
+
+  <h2>Base vs assistant: same weights family, different distribution</h2>
+
+  <figure class="anim" id="fig-basevs">
+    <div class="fig-title">Animation · One prompt, two personalities</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-bv-t">
+      <title id="fig-bv-t">Base model continuing text versus instruct model answering</title>
+      <g id="prompt8" class="mono">
+        <rect x="140" y="30" width="360" height="44" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="58" text-anchor="middle" font-size="17" class="sv-ink">"How do I center a div in CSS?"</text>
+      </g>
+      <!-- base -->
+      <g id="base-resp">
+        <path d="M 240 78 L 165 118" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#sf-a)"/>
+        <rect x="30" y="124" width="280" height="150" rx="12" fill="#fee2e2" stroke="#fca5a5" stroke-width="2"/>
+        <text x="170" y="150" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">BASE model continues:</text>
+        <text x="170" y="180" text-anchor="middle" font-size="17" class="mono" fill="#b91c1c">"This is a question asked by</text>
+        <text x="170" y="204" text-anchor="middle" font-size="17" class="mono" fill="#b91c1c">many beginners. Related:</text>
+        <text x="170" y="228" text-anchor="middle" font-size="17" class="mono" fill="#b91c1c">How do I center text?</text>
+        <text x="170" y="252" text-anchor="middle" font-size="17" class="mono" fill="#b91c1c">How do I use flexbox? …"</text>
+      </g>
+      <!-- instruct -->
+      <g id="inst-resp" class="sp-hide">
+        <path d="M 400 78 L 475 118" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#sf-a)"/>
+        <rect x="330" y="124" width="280" height="150" rx="12" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+        <text x="470" y="150" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">SFT model answers:</text>
+        <text x="470" y="180" text-anchor="middle" font-size="17" class="mono" fill="#047857">"Use flexbox on the parent:</text>
+        <text x="470" y="204" text-anchor="middle" font-size="17" class="mono" fill="#047857">display: flex;</text>
+        <text x="470" y="228" text-anchor="middle" font-size="17" class="mono" fill="#047857">justify-content: center;</text>
+        <text x="470" y="252" text-anchor="middle" font-size="17" class="mono" fill="#047857">align-items: center;"</text>
+      </g>
+      <g id="why8" class="sp-hide">
+        <rect x="60" y="296" width="520" height="44" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="320" y="324" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">the base isn't dumb — "answering" was simply never its most likely continuation</text>
+      </g>
+      <defs>
+        <marker id="sf-a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#94a3b8"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-bv-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-basevs svg",
+        caption: "#fig-bv-cap",
+        steps: [
+          { caption: "A base model treats your question as text-to-continue. On the internet, questions are often followed by… more questions, metadata, forum noise. So that's what it produces." },
+          { caption: "The SFT'd sibling — same architecture, same pretraining — answers directly, formats sensibly, stops when done.", show: ["#inst-resp"] },
+          { caption: "Nothing about intelligence changed. SFT reshaped WHICH continuations are probable: from 'internet-typical' to 'assistant-typical'. That distribution shift is the entire product called chat.", show: ["#why8"], holdMs: 6200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The mechanics: demonstration data, loss on the answer</h2>
+
+  <p>
+    SFT is M8.2's recipe applied to a decoder with one twist. Data: thousands to
+    millions of (instruction, ideal response) pairs — human-written (expensive, the
+    original InstructGPT way), synthetic (generated by a stronger model — "distilled"
+    datasets like Alpaca's), or mined and cleaned. Training: ordinary causal-LM
+    next-token prediction (M5.7), but with the loss <strong>masked to the response
+    tokens only</strong> — the model reads the instruction but is only graded on its
+    answer. A few thousand high-quality pairs measurably change behavior; the LIMA
+    paper's famous claim: ~1,000 <em>excellent</em> examples beat far larger sloppy
+    sets. Quality over quantity, again (M8.2's 80%).
+  </p>
+
+  <h2>Chat templates: what your API call actually becomes</h2>
+
+  <p>
+    Conversations aren't native to a token stream — they're <strong>serialized</strong>
+    into one with special markers, and the model is SFT'd on exactly that format.
+    Llama-3's actual template for a two-turn exchange:
+  </p>
+
+<pre><code>&lt;|begin_of_text|&gt;&lt;|start_header_id|&gt;system&lt;|end_header_id|&gt;
+You are a helpful assistant.&lt;|eot_id|&gt;
+&lt;|start_header_id|&gt;user&lt;|end_header_id|&gt;
+How do I center a div?&lt;|eot_id|&gt;
+&lt;|start_header_id|&gt;assistant&lt;|end_header_id|&gt;
+</code></pre>
+
+  <p>
+    That's what <code>messages=[{"role": "system", ...}, {"role": "user", ...}]</code>
+    compiles to. Three consequences worth engraving: <strong>(1)</strong> the "system
+    prompt" is just tokens in a privileged-by-convention position — its authority
+    comes entirely from SFT examples where system instructions were followed; nothing
+    architectural enforces it (the security implications are M11.6's whole topic).
+    <strong>(2)</strong> generation stops when the model emits <code>&lt;|eot_id|&gt;</code>
+    — "knowing when to stop talking" is a trained behavior. <strong>(3)</strong> using
+    the wrong template with a model (or none) silently degrades it — a real,
+    common production bug when self-hosting.
+  </p>
+
+  <h2>What SFT can and cannot fix</h2>
+
+  <p>
+    Calibrate expectations like an engineer: SFT is excellent at <strong>format and
+    style</strong> (JSON output, tone, structure — it IS imitation learning),
+    good at <strong>task patterns</strong> (summarize-then-list, chain-of-thought
+    habits), weak at <strong>adding knowledge</strong> (a few thousand pairs cannot
+    outweigh trillions of pretraining tokens — facts belong in RAG, M8.6), and
+    <strong>wrong for truthfulness</strong> in a subtle way: SFT teaches "produce
+    answers shaped like the demonstrations" — including confident-sounding ones when
+    the model doesn't know. Teaching calibrated behavior ("say you're unsure") needs
+    preference-based training — which is precisely the cliffhanger for the next page.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      InstructGPT (the paper behind ChatGPT's method): the SFT stage used just
+      <strong>~13,000</strong> human demonstrations on a 175B base — 0.000004% of
+      pretraining data volume, transformative behavior change. LIMA: <strong>1,000</strong>
+      curated pairs on a 65B base produced a credible assistant. Alpaca: 52k synthetic
+      pairs, <strong>&lt;$600</strong> total (generation + training) to chat-tune a 7B
+      in 2023 — the moment DIY instruction-tuning became a weekend project.
+      The lesson across all three: behavior is cheap to steer; competence was the
+      expensive part (M6.1).
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Debugging superpowers unlocked: when your chatbot ignores the system prompt,
+      you now know it's a <em>training-strength</em> issue (how heavily that model's
+      SFT weighted system-following), not a syntax error on your side. When a
+      self-hosted model outputs garbage, your first check is now the chat template
+      (<code>tokenizer.apply_chat_template</code>). And when you write few-shot
+      examples into a system prompt, you're doing micro-SFT at inference time
+      (M6.3's in-context learning) — same principle, no gradients. The stack of
+      "behavior-shaping layers" on top of one base model is now fully legible to you.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: see the template, then the transformation</div>
+<pre><code>from transformers import AutoTokenizer
+
+tok = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B-Instruct")
+msgs = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "How do I center a div?"},
+]
+print(tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True))
+# ↑ the EXACT string your API calls become — special tokens and all
+
+# then experience the base-vs-instruct gap yourself:
+from transformers import pipeline
+for name in ["meta-llama/Llama-3.2-1B", "meta-llama/Llama-3.2-1B-Instruct"]:
+    gen = pipeline("text-generation", model=name, max_new_tokens=60)
+    out = gen("How do I center a div in CSS?")[0]["generated_text"]
+    print("\n" + "="*30, name.split("/")[-1], "\n", out)
+</code></pre>
+    <p>
+      Same 1B parameters, night-and-day behavior — the whole page in one diff. Keep
+      <code>apply_chat_template</code> in your toolkit: it's the canonical answer to
+      "what is the model actually seeing?", which is where half of all prompt
+      debugging should start.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    SFT = supervised fine-tuning on (instruction, response) demonstrations, loss on
+    the response — it converts a text-continuer into an assistant by reshaping which
+    continuations are probable. Chat is a <strong>serialization format the model was
+    trained on</strong>; system-prompt authority is learned, not enforced; and SFT
+    buys format and style, not knowledge or honesty. For "which of five decent answers
+    is best" — turn the page.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>What exactly changes between a base model and its -Instruct version?</summary>
+      <div><p>Weights are further trained (SFT, usually + preference tuning) on demonstration conversations serialized in a chat template — same architecture, same pretraining. The output distribution shifts from "likely internet continuation" to "likely assistant response": answering rather than continuing, following formats, respecting role markers, emitting stop tokens. Capability is largely inherited; behavior is what's purchased — for ~0.001% of pretraining's cost.</p></div>
+    </details>
+    <details>
+      <summary>Why is loss masked to response tokens during SFT?</summary>
+      <div><p>The instruction/prompt tokens are context the model should condition on, not text it should learn to generate — training on them would teach the model to produce user-like questions and system-prompt boilerplate, wasting capacity and polluting behavior. Masking focuses the gradient purely on "given this context, produce this response." (Implementation: labels = -100 on non-response positions in HF.) Same logic as only grading a student's answers, not their copy of the exam questions.</p></div>
+    </details>
+    <details>
+      <summary>What gives the system prompt its authority?</summary>
+      <div><p>Nothing architectural — it's ordinary tokens at a conventional position. Authority comes from training data: SFT/preference examples where system-role instructions were consistently obeyed, including when user turns tried to override them. Consequently it's probabilistic, varies by model and training strength, and can be defeated by adversarial inputs (jailbreaks/injection — M11.6). Engineering corollary: system prompts are strong steering, not access control — never rely on them as a security boundary.</p></div>
+    </details>
+    <details>
+      <summary>Why can't SFT reliably add new knowledge to a model?</summary>
+      <div><p>Scale mismatch: a few thousand fine-tuning examples versus trillions of pretraining tokens — the gradient pressure to encode new facts is tiny, and pushing hard enough to force them in risks catastrophic forgetting (M8.1). SFT efficiently reshapes BEHAVIOR (formats, styles, patterns — richly represented in even small sets) but facts need either massive continued pretraining or, far more practically, retrieval at inference (RAG). "Style in the weights, facts in the context" is the operational rule (formalized in M8.6).</p></div>
+    </details>
+    <details>
+      <summary>A self-hosted instruct model performs far worse than the same model on a hosted API. First suspects?</summary>
+      <div><p>(1) Chat template mismatch — raw prompts or a wrong template instead of <code>apply_chat_template</code>: the model sees a format it was never trained on (the #1 cause). (2) Missing/incorrect stop tokens — outputs run on or truncate. (3) Sampling defaults differ (temperature/top-p, M11.1). (4) Quantization quality loss if running a heavily compressed variant (M11.3). (5) The API actually serves a different/updated checkpoint. Debug order: print the exact token stream in, then compare sampling configs — template errors are found in minutes once you look.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

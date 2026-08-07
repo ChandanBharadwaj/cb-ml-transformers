@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transfer Learning &amp; Heads — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="08-fine-tuning/transfer-learning-and-heads">
+<main id="content">
+
+  <h1>Transfer Learning &amp; Heads</h1>
+
+  <p>
+    Your side of the pretrain/adapt economy begins. This module is the deep dive you
+    asked for on fine-tuning — six pages from the fundamental move to the decision
+    framework. Page one: <em>why</em> a model trained on the internet can learn YOUR
+    task from 500 examples, what a "head" is, what "freezing" means, and the failure
+    mode (catastrophic forgetting) that shapes every recipe that follows.
+  </p>
+
+  <h2>The fundamental move: new head, borrowed body</h2>
+
+  <p>
+    A pretrained encoder ends in rich contextual vectors; a pretrained decoder ends in
+    next-token logits. Neither ends in <em>your</em> labels. Fine-tuning's basic move:
+    <strong>chop off the model's final layer, bolt on a fresh small "head" for your
+    task</strong> (for classification: one M1.3 matrix mapping d → num_classes), and
+    train on your data. The body arrives knowing language (M6.1's expensive gift);
+    the head learns to read your labels off representations that already contain
+    almost everything needed.
+  </p>
+
+  <figure class="anim" id="fig-head">
+    <div class="fig-title">Animation · Head transplant, and who actually learns</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-hd8-t">
+      <title id="fig-hd8-t">Replacing a pretraining head with a task head over a mostly-frozen body</title>
+      <!-- body -->
+      <g id="body8">
+        <rect x="200" y="150" width="240" height="200" rx="14" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+        <text x="320" y="185" text-anchor="middle" font-size="18" fill="#1d4ed8" font-weight="700">pretrained body</text>
+        <text x="320" y="212" text-anchor="middle" font-size="17" fill="#1d4ed8">6–96 transformer blocks</text>
+        <text x="320" y="240" text-anchor="middle" font-size="17" fill="#64748b">grammar · facts · style</text>
+        <text x="320" y="264" text-anchor="middle" font-size="17" fill="#64748b">(M6.1: someone paid $10M+)</text>
+        <text x="320" y="330" text-anchor="middle" font-size="17" fill="#64748b">tokens in ↑</text>
+      </g>
+      <!-- old head -->
+      <g id="old-head">
+        <rect x="230" y="70" width="180" height="56" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+        <text x="320" y="96" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">MLM head</text>
+        <text x="320" y="118" text-anchor="middle" font-size="17" fill="#64748b">predicts masked words</text>
+      </g>
+      <!-- new head -->
+      <g id="new-head" class="sp-hide">
+        <rect x="230" y="70" width="180" height="56" rx="12" fill="#d1fae5" stroke="#059669" stroke-width="2.5"/>
+        <text x="320" y="96" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">YOUR head</text>
+        <text x="320" y="118" text-anchor="middle" font-size="17" fill="#047857">384 → {urgent, normal, spam}</text>
+      </g>
+      <g id="head-note" class="sp-hide">
+        <text x="500" y="90" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">~1,155 params</text>
+        <text x="500" y="112" text-anchor="middle" font-size="17" fill="#64748b">vs 22M in the body</text>
+      </g>
+      <!-- heat overlay -->
+      <g id="heat" class="sp-hide">
+        <rect x="200" y="150" width="240" height="50" rx="14" fill="#dc2626" opacity="0.35"/>
+        <rect x="200" y="200" width="240" height="50" fill="#f59e0b" opacity="0.25"/>
+        <rect x="200" y="250" width="240" height="50" fill="#fbbf24" opacity="0.12"/>
+        <text x="520" y="180" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">top layers: move a lot</text>
+        <text x="520" y="230" text-anchor="middle" font-size="17" fill="#b45309">middle: a little</text>
+        <text x="520" y="285" text-anchor="middle" font-size="17" fill="#64748b">bottom: barely at all</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-hd8-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-head svg",
+        caption: "#fig-hd8-cap",
+        steps: [
+          { caption: "A pretrained model = an expensive body wearing a task-specific hat. BERT's hat predicts masked words — useless for your ticket-triage task." },
+          { caption: "Swap the hat: a fresh linear layer mapping the body's 384-dim vectors to YOUR three classes. Randomly initialized, tiny.", show: ["#new-head"], hide: ["#old-head"] },
+          { caption: "The new head is ~1,155 parameters riding a 22M body — 0.005%. The head learns to READ what the body already represents; it doesn't have to learn language.", show: ["#head-note"] },
+          { caption: "And when you fine-tune the whole thing, watch WHERE change happens (measured, real phenomenon): top layers adapt substantially, bottom layers — the general language machinery — barely move. The network itself localizes 'task' near the head and 'language' near the bottom.", show: ["#heat"], holdMs: 6600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The freezing dial: three settings</h2>
+
+  <p>
+    "Freezing" = excluding parameters from training (no gradients, no optimizer state —
+    which, per M7.2's bill, also means huge memory savings). The dial has three classic
+    positions: <strong>feature extraction</strong> — freeze everything, train only the
+    head; the body is a fixed featurizer (you did exactly this in M3.7's Build 4:
+    MiniLM + logistic regression). <strong>Full fine-tuning</strong> — everything
+    trainable; best quality, most expensive, most dangerous (forgetting, below).
+    <strong>Partial/graded</strong> — freeze bottom layers, tune top ones; or use
+    layer-wise LR decay (smaller learning rates for deeper layers), respecting the
+    heat-map: let each layer move in proportion to how task-specific it should be.
+    (Position four on the dial — LoRA — gets its own page, 8.5.)
+  </p>
+
+  <h2>Catastrophic forgetting: the price of plasticity</h2>
+
+  <p>
+    The failure mode that stalks every aggressive fine-tune: gradient descent has
+    <strong>no loyalty to old knowledge</strong>. Weights encode pretraining's
+    competence; your task's gradients happily overwrite them if pushed hard (high LR,
+    many epochs, narrow data). Symptoms: the model aces your task but its general
+    abilities degrade — an LLM fine-tuned hard on JSON extraction starts writing
+    stilted prose; a chat model tuned on medical text forgets how to refuse.
+    Defenses, all reducible to "move less": <strong>small LR</strong> (2e-5, not 1e-3),
+    <strong>few epochs</strong>, <strong>mixed data</strong> (blend some general text
+    into task data), freezing/LoRA (structurally limit what can move), and evaluation
+    on <em>general</em> benchmarks, not just your task, before shipping.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      The sample-efficiency miracle, quantified on sentiment classification:
+      from-scratch LSTM needs ~<strong>25k labeled examples</strong> for 85% accuracy;
+      fine-tuned DistilBERT hits ~<strong>90% with 500</strong>; even
+      <strong>50 examples</strong> gets ~84% — because the body's "is this text
+      positive-ish?" features already exist and merely need wiring to labels.
+      That 50× data reduction is transfer learning's entire commercial value:
+      labeled data is the scarcest resource in applied ML, and pretraining is a
+      subsidy on it.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      You've already run two settings of the freezing dial: M3.7's Build 4 was
+      feature extraction (frozen MiniLM + trained LR head — and it beat TF-IDF by 5
+      points); GLiNER (M10 soon) is a pretrained encoder + a clever span-matching head
+      — this page's pattern with a fancier hat. And the heat-map explains a fact
+      you'll use in M9: sentence-embedding fine-tuning mostly reshapes upper layers'
+      geometry, which is why even light contrastive tuning transforms retrieval
+      quality without touching the model's language core.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: measure the freezing dial yourself</div>
+<pre><code>import torch, torch.nn as nn
+from transformers import AutoModel, AutoTokenizer
+
+tok = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+body = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+
+# the head transplant, literally:
+head = nn.Linear(384, 3)                      # your 3 classes
+print("body params:", sum(p.numel() for p in body.parameters()))   # 22.7M
+print("head params:", sum(p.numel() for p in head.parameters()))   # 1,155
+
+# setting 1: feature extraction — freeze the body
+for p in body.parameters():
+    p.requires_grad = False
+trainable = sum(p.numel() for p in body.parameters() if p.requires_grad) \
+          + sum(p.numel() for p in head.parameters())
+print(f"trainable now: {trainable:,} ({trainable/22.7e6:.3%} of the model)")
+
+# setting 3: unfreeze just the top 2 of 6 layers
+for name, p in body.named_parameters():
+    p.requires_grad = ("encoder.layer.4" in name or "encoder.layer.5" in name)
+trainable = sum(p.numel() for p in body.parameters() if p.requires_grad)
+print(f"top-2-layers setting: {trainable:,} trainable in body")
+</code></pre>
+    <p>
+      Three print statements, and "freezing" stops being jargon: it's
+      <code>requires_grad = False</code>, and you just watched it move the trainable
+      count from 22.7M to 1,155 to ~7M. Wire this into M3.7's training loop with your
+      own labels and you have a production-pattern classifier this afternoon.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Fine-tuning = <strong>borrowed body + new head + a freezing dial</strong>.
+    The body's pretrained features are why 500 examples suffice; the heat-map (top
+    layers move, bottom barely) is why partial freezing works; and catastrophic
+    forgetting is why every good recipe whispers "small LR, few epochs, move less."
+    Next page: the full recipe, curve-reading included.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Why does fine-tuning need so much less data than training from scratch?</summary>
+      <div><p>Pretraining already learned the hard part — general language features (syntax, semantics, world knowledge) occupying 99.9%+ of parameters. Fine-tuning only learns a mapping from those existing features to task labels (plus light feature adjustment in upper layers). Learning a d→classes head from rich representations is a low-sample problem; learning language from scratch is not. Hence 500 examples ≈ competitive where scratch training needs 25k+ — transfer is a data subsidy.</p></div>
+    </details>
+    <details>
+      <summary>Feature extraction vs full fine-tuning — trade-offs and when to choose each?</summary>
+      <div><p>Feature extraction (frozen body): minutes to train, tiny memory (no body gradients/optimizer — M7.2), zero forgetting risk, one body can serve many heads; ceiling limited by how well generic features fit the task. Full fine-tuning: adapts representations themselves, typically several points better, especially for domain-shifted data; costs full training memory, risks forgetting, one model copy per task. Heuristic: start frozen (cheap baseline), go full/partial/LoRA only if the quality gap on YOUR eval justifies it.</p></div>
+    </details>
+    <details>
+      <summary>What is catastrophic forgetting, mechanically, and how do you mitigate it?</summary>
+      <div><p>Gradient descent optimizes only the current loss; nothing preserves weights that encoded pretraining competence, so aggressive task training overwrites them — task metrics rise while general capability quietly degrades. Mitigations: lower LR and fewer epochs (smaller total weight movement), freeze lower layers or use LoRA (structurally cap movement), mix general data into the fine-tuning set (replay), and — the operational must — evaluate general behavior, not just task metrics, before shipping. For LLMs, KL-regularization to the base model (M8.4's leash) is the same idea formalized.</p></div>
+    </details>
+    <details>
+      <summary>Why do lower transformer layers change less during fine-tuning?</summary>
+      <div><p>Empirically (probing + weight-delta studies): lower layers encode general, task-agnostic patterns (morphology, local syntax — M5.6's hierarchy) useful for any objective, so task gradients demand little change there; upper layers encode abstract, task-relevant semantics where adaptation pays. Gradients naturally concentrate change where loss reduction is available. Practitioners exploit this via layer-wise LR decay and bottom-freezing — aligning the training procedure with where change is needed.</p></div>
+    </details>
+    <details>
+      <summary>Your fine-tuned model wins on the task but users say it "got weirder." What happened and what's your process fix?</summary>
+      <div><p>Classic catastrophic forgetting / distribution narrowing: the tune over-specialized (too many epochs, high LR, or homogeneous data), degrading general fluency, format flexibility, or safety behavior — invisible to your task-only eval. Fixes: retrain with gentler recipe + mixed data; adopt LoRA (bounded change, instantly revertible); and process-wise, add a general-capability regression suite (held-out chat/format/QA probes) to the ship gate alongside task metrics. The insight interviewers want: your eval defines what you protect — anything unmeasured is negotiable to SGD.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

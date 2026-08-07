@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GPT &amp; Causal Language Modeling — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="06-model-families/gpt-and-causal-lm">
+<main id="content">
+
+  <h1>GPT &amp; Causal Language Modeling</h1>
+
+  <p>
+    The other branch of the 2018 fork. Where BERT bet on bidirectional understanding,
+    the GPT line bet on M5.7's masked decoder and the simplest objective in the book —
+    predict the next token — then discovered that <strong>scaling that one bet</strong>
+    produces something qualitatively new: models you can teach with examples in the
+    prompt, no gradient updates at all. That discovery, in-context learning, is why
+    the LLM era looks the way it does — and why you prompt models instead of training
+    them.
+  </p>
+
+  <h2>Causal LM: every position is a training example</h2>
+
+  <p>
+    The objective needs one paragraph because M5.7 built it: causal mask on, every
+    position predicts its successor, all positions in parallel, cross-entropy averaged.
+    What deserves emphasis is the <strong>density</strong>: a 1,000-token document
+    yields 1,000 predictions per pass (MLM: only the masked 15%, i.e. 150). More signal
+    per pass, from any raw text, no masking decisions — the operational simplicity that
+    later made trillion-token training runs tractable.
+  </p>
+
+  <h2>The scaling story: 117M → 1.5B → 175B</h2>
+
+  <figure class="anim" id="fig-scale">
+    <div class="fig-title">Animation · Three GPTs, one recipe, new behaviors</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-sc-t">
+      <title id="fig-sc-t">GPT-1 through GPT-3 with emerging capabilities</title>
+      <!-- bars -->
+      <g id="g1">
+        <rect x="60" y="300" width="120" height="40" rx="8" fill="#93c5fd"/>
+        <text x="120" y="326" text-anchor="middle" font-size="17" fill="#1e3a8a" font-weight="700">GPT-1 · 117M</text>
+        <text x="120" y="360" text-anchor="middle" font-size="17" fill="#64748b">2018 · needs fine-tuning</text>
+      </g>
+      <g id="g2" class="sp-hide">
+        <rect x="230" y="220" width="120" height="120" rx="8" fill="#60a5fa"/>
+        <text x="290" y="286" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">GPT-2 · 1.5B</text>
+        <text x="290" y="360" text-anchor="middle" font-size="17" fill="#64748b">2019 · coherent prose</text>
+      </g>
+      <g id="g3" class="sp-hide">
+        <rect x="400" y="70" width="120" height="270" rx="8" fill="#2563eb"/>
+        <text x="460" y="210" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">GPT-3 · 175B</text>
+        <text x="460" y="360" text-anchor="middle" font-size="17" fill="#64748b">2020 · in-context learning</text>
+      </g>
+      <g id="emerge" class="sp-hide">
+        <rect x="60" y="30" width="520" height="28" rx="8" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="320" y="49" text-anchor="middle" font-size="17" fill="#92400e" font-weight="700">same architecture, same objective — only the dials turned (M7.4 explains why this works)</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-sc-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-scale svg",
+        caption: "#fig-sc-cap",
+        steps: [
+          { caption: "GPT-1: proof of concept — pretrain a decoder on books, fine-tune per task. Useful, unremarkable, BERT outshone it." },
+          { caption: "GPT-2: 13× bigger, web-scale data. Suddenly: paragraphs of coherent text. Famous for the staged release over misuse worries — quaint in hindsight, historically important.", show: ["#g2"] },
+          { caption: "GPT-3: 117× bigger again. And with scale came the surprise nobody designed…", show: ["#g3"] },
+          { caption: "…in-context learning. Identical recipe throughout — the capabilities CAME FROM SCALE. That empirical fact reorganized the entire field around the scaling laws you'll meet in M7.4.", show: ["#emerge"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>In-context learning: the capability that changed everything</h2>
+
+  <p>
+    The GPT-3 paper's bombshell: show the model a few input→output examples
+    <em>inside the prompt</em>, and it continues the pattern — task "learned" with
+    <strong>zero weight updates</strong>. Translation from three examples. Format
+    conversion from two. Classification from five. The model, having spent pretraining
+    compressing every pattern the internet contains, learned the meta-skill of
+    <em>recognizing and continuing patterns</em> — and a prompt's examples are just
+    one more pattern to continue.
+  </p>
+
+  <figure class="anim" id="fig-icl">
+    <div class="fig-title">Animation · Learning without learning</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-icl-t">
+      <title id="fig-icl-t">Few-shot examples in a prompt inducing task behavior</title>
+      <g id="prompt-box" class="mono">
+        <rect x="40" y="40" width="360" height="230" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="60" y="72" font-size="17" class="sv-ink">sea otter → loutre de mer</text>
+        <text id="ex2" x="60" y="112" font-size="17" class="sv-ink">cheese → fromage</text>
+        <text id="ex3" x="60" y="152" font-size="17" class="sv-ink">mint → menthe</text>
+        <text id="query" x="60" y="204" font-size="17" fill="#1d4ed8" font-weight="700">plush giraffe →</text>
+        <text x="60" y="248" font-size="17" fill="#64748b">(the whole "dataset" lives in the prompt)</text>
+      </g>
+      <g id="completion" class="sp-hide">
+        <line x1="404" y1="155" x2="450" y2="155" stroke="#94a3b8" stroke-width="3" marker-end="url(#ic-a)"/>
+        <rect x="456" y="125" width="160" height="60" rx="12" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+        <text x="536" y="162" text-anchor="middle" font-size="17" class="mono" fill="#047857" font-weight="700">girafe en peluche</text>
+      </g>
+      <g id="no-grad" class="sp-hide">
+        <rect x="40" y="296" width="576" height="42" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="328" y="323" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">no gradients, no updates — pattern-continuation IS the "learning"</text>
+      </g>
+      <defs>
+        <marker id="ic-a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#94a3b8"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-icl-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-icl svg",
+        caption: "#fig-icl-cap",
+        steps: [
+          { caption: "Three English→French pairs in the prompt, then a query. To the model this is just… text to continue." },
+          { caption: "And the most probable continuation of this text-pattern is the correct translation. Task performed; parameters untouched.", show: ["#completion"] },
+          { caption: "This is why 'prompt engineering' exists as a discipline, why few-shot examples improve your chatbot, and why fine-tuning became OPTIONAL for many tasks. The 3.3 training loop got replaced, for you, by writing better context.", show: ["#no-grad"], holdMs: 6200 }
+        ]
+      });
+    });
+  </script>
+
+  <p>
+    Vocabulary you'll use in interviews: <strong>zero-shot</strong> (instruction only),
+    <strong>few-shot</strong> (instruction + examples), and the mechanism behind both is
+    this page. One honest caveat: in-context "learning" is pattern induction over the
+    context window — it doesn't persist, doesn't update knowledge, and can be brittle
+    to example choice and order. Powerful, not magic.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      GPT-3's few-shot translation: with 32 in-prompt examples it approached
+      fine-tuned systems of its day. The dials from GPT-2 to GPT-3, in config terms
+      you now read fluently (M5.6): d 1600→12288, L 48→96, heads 25→96, context
+      1024→2048, params 1.5B→175B, data ~40GB→~570GB. Compute: ~3,640 petaFLOP-days ≈
+      <strong>$4.6M</strong> of 2020 cloud GPU time — the number that made "scaling
+      laws" a boardroom phrase.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Every prompt-side trick you use daily is applied in-context learning: few-shot
+      examples in your chatbot's system prompt; the retrieved chunks in your RAG
+      pipeline (documents as "examples" the model reads at inference — knowledge
+      in-context instead of in-weights); even tool-calling schemas (M12.4) are
+      patterns the model continues. And one clarification this page arms you with:
+      the base GPT here <em>completes</em> text — it doesn't chat, follow
+      instructions, or refuse anything. The gap between this page's model and your
+      chatbot's behavior is entirely M8.3–8.4 (SFT and RLHF). Base ≠ assistant.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: watch in-context learning turn on</div>
+<pre><code>from transformers import pipeline
+gen = pipeline("text-generation", model="gpt2", max_new_tokens=8)
+
+zero_shot = "Translate English to French:\nplush giraffe →"
+few_shot  = ("Translate English to French:\n"
+             "sea otter → loutre de mer\n"
+             "cheese → fromage\n"
+             "mint → menthe\n"
+             "plush giraffe →")
+
+print("ZERO-SHOT:", gen(zero_shot)[0]["generated_text"][len(zero_shot):])
+print("FEW-SHOT :", gen(few_shot)[0]["generated_text"][len(few_shot):])
+</code></pre>
+    <p>
+      GPT-2 (1.5B, pre-ICL-era) usually fumbles both — try the same pair against any
+      modern model API and few-shot snaps into place. You're measuring the capability
+      that emerged between 2019 and 2020, with your own prompts. Also instructive:
+      give GPT-2 a bare question and watch it <em>continue</em> rather than
+      <em>answer</em> — the base-model behavior that M8.3 exists to fix.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    The GPT line = M5.7's masked decoder + next-token prediction + <strong>relentless
+    scaling</strong>. Its gift was in-context learning: at sufficient scale, examples
+    in the prompt induce task behavior with no weight updates — the discovery that made
+    prompting a programming model and set up everything in the LLM era. BERT understands
+    deeply; GPT generates and adapts on the fly; you now know exactly why each is shaped
+    for its job.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Compare MLM and causal LM as pretraining objectives.</summary>
+      <div><p>MLM (BERT): predict 15% hidden tokens from bidirectional context — richer per-token representations, ideal for understanding tasks; but only 15% of positions give signal per pass, and no natural generation. Causal LM (GPT): predict every next token left-to-right — 100% of positions give signal, arbitrarily scalable on raw text, natively generative; but each prediction sees only left context. The field's split: encoders/MLM for representation, decoders/causal for generation — with causal winning the scale race on simplicity and signal density.</p></div>
+    </details>
+    <details>
+      <summary>What is in-context learning, mechanically?</summary>
+      <div><p>Behavior where a pretrained LM performs a task after seeing input→output examples in its prompt, with no parameter updates: the model treats the examples as a pattern and generates the most probable continuation. It emerges at scale (barely present in GPT-2, strong in GPT-3+); research framings include implicit Bayesian inference and induction-head circuits that copy-and-extend patterns. Practical limits: bounded by the context window, sensitive to example choice/order/format, and nothing persists across calls.</p></div>
+    </details>
+    <details>
+      <summary>Why did next-token prediction scale better than masked LM?</summary>
+      <div><p>Signal density (every token supervises, vs 15%), zero preprocessing decisions (no mask rates or corruption schemes — just raw text), a single objective that doubles as the deployment interface (training task = generation task, no head-swapping), and natural compatibility with the KV-cache serving pattern. Each factor is small; multiplied over trillion-token runs and production serving they decided the era. (M6.4 adds T5's evidence to this story.)</p></div>
+    </details>
+    <details>
+      <summary>A base (non-instruct) model answers your question with more questions. Why?</summary>
+      <div><p>Because it's a text-continuation engine, not an assistant: given "What is the capital of France?" the statistically likely continuations include more quiz questions, exam formatting, or forum context — whatever followed such text in the corpus. Nothing in pretraining rewards answering. Instruction tuning (SFT, M8.3) and preference tuning (RLHF, M8.4) reshape the distribution toward helpful responses. Distinguishing base-model behavior from assistant behavior is a reliable interview discriminator.</p></div>
+    </details>
+    <details>
+      <summary>When do few-shot examples beat fine-tuning, and vice versa?</summary>
+      <div><p>Few-shot wins when: examples are scarce (&lt;100), tasks change often, you can't host/modify weights, or latency of iteration matters (edit a prompt vs run a training job). Fine-tuning wins when: you have thousands of consistent examples, need maximum quality/consistency, want shorter prompts (cost — examples are re-billed every call!), or need behavior no prompt reliably elicits. Production pattern: prototype few-shot, graduate to fine-tuning when volume and stability justify it (the M8.6 decision framework).</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tensors, GPUs &amp; Batching — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="07-compute-and-scale/tensors-gpus-and-batching">
+<main id="content">
+
+  <h1>Tensors, GPUs &amp; Batching</h1>
+
+  <p>
+    New module: the physical layer. You asked for the compute story, and it starts
+    here — what shape data actually takes inside a transformer, why one specific chip
+    architecture eats this workload alive, and why "batch it" is the answer to half of
+    all performance questions. This module is what makes M11's serving tricks and M8's
+    fine-tuning constraints feel obvious instead of arbitrary.
+  </p>
+
+  <h2>Tensors: the shapes that flow</h2>
+
+  <p>
+    A <strong>tensor</strong> is just an n-dimensional array — vector (1-D), matrix
+    (2-D), and up. Everything in a transformer is tensors flowing through matrix
+    multiplies, and one shape matters above all: the activation tensor
+    <strong>(batch, sequence, hidden)</strong> — B sentences × n tokens × d dims.
+    Follow it through MiniLM for a batch of 32 texts, 128 tokens each:
+    embeddings produce (32, 128, 384); every block maps (32, 128, 384) → (32, 128, 384)
+    (M5.6's closure!); attention internally blooms a (32, 12, 128, 128) score tensor
+    (batch, heads, n, n — the O(n²) made visible); the FFN briefly widens to
+    (32, 128, 1536). Being able to narrate these shapes is what "understands the
+    forward pass" means in practice — and it's how you'll debug every shape-mismatch
+    error for the rest of your career.
+  </p>
+
+  <h2>Why GPUs: 10,000 line cooks</h2>
+
+  <p>
+    A CPU is ~8–64 sophisticated cores — brilliant at branching logic, wasted on
+    repetitive arithmetic. A GPU is <strong>tens of thousands of simple cores</strong>
+    that all execute the same instruction on different data. A matrix multiply is
+    exactly that: millions of independent multiply-adds with zero branching — M1.3's
+    "each output = one dot product" means every output cell can be computed by a
+    different core, simultaneously. Transformers are ~99% matmul by FLOPs; the
+    marriage was arranged in heaven. (<code>.to("cuda")</code> in PyTorch = "copy these
+    tensors to GPU memory and run kernels there"; CUDA is NVIDIA's programming layer
+    for it.)
+  </p>
+
+  <figure class="anim" id="fig-race7">
+    <div class="fig-title">Animation · One matmul, two kinds of chip</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-rc-t">
+      <title id="fig-rc-t">CPU serial computation versus GPU parallel grid</title>
+      <!-- CPU side -->
+      <g id="cpu">
+        <rect x="30" y="50" width="270" height="200" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="165" y="80" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">CPU · 8 fancy cores</text>
+        <g>
+          <rect x="60" y="100" width="50" height="50" rx="8" fill="#94a3b8"/>
+          <rect x="120" y="100" width="50" height="50" rx="8" fill="#94a3b8"/>
+          <rect x="180" y="100" width="50" height="50" rx="8" fill="#94a3b8"/>
+          <rect x="240" y="100" width="40" height="50" rx="8" fill="#94a3b8"/>
+        </g>
+        <text x="165" y="190" text-anchor="middle" font-size="17" fill="#64748b">chews the matrix</text>
+        <text x="165" y="212" text-anchor="middle" font-size="17" fill="#64748b">a few cells at a time</text>
+      </g>
+      <!-- GPU side -->
+      <g id="gpu" class="sp-hide">
+        <rect x="340" y="50" width="270" height="200" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="475" y="80" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">GPU · thousands of simple cores</text>
+        <g id="gpu-grid" fill="#2563eb">
+          <rect x="370" y="96" width="16" height="16" rx="3"/><rect x="390" y="96" width="16" height="16" rx="3"/><rect x="410" y="96" width="16" height="16" rx="3"/><rect x="430" y="96" width="16" height="16" rx="3"/><rect x="450" y="96" width="16" height="16" rx="3"/><rect x="470" y="96" width="16" height="16" rx="3"/><rect x="490" y="96" width="16" height="16" rx="3"/><rect x="510" y="96" width="16" height="16" rx="3"/><rect x="530" y="96" width="16" height="16" rx="3"/><rect x="550" y="96" width="16" height="16" rx="3"/><rect x="570" y="96" width="16" height="16" rx="3"/>
+          <rect x="370" y="116" width="16" height="16" rx="3"/><rect x="390" y="116" width="16" height="16" rx="3"/><rect x="410" y="116" width="16" height="16" rx="3"/><rect x="430" y="116" width="16" height="16" rx="3"/><rect x="450" y="116" width="16" height="16" rx="3"/><rect x="470" y="116" width="16" height="16" rx="3"/><rect x="490" y="116" width="16" height="16" rx="3"/><rect x="510" y="116" width="16" height="16" rx="3"/><rect x="530" y="116" width="16" height="16" rx="3"/><rect x="550" y="116" width="16" height="16" rx="3"/><rect x="570" y="116" width="16" height="16" rx="3"/>
+          <rect x="370" y="136" width="16" height="16" rx="3"/><rect x="390" y="136" width="16" height="16" rx="3"/><rect x="410" y="136" width="16" height="16" rx="3"/><rect x="430" y="136" width="16" height="16" rx="3"/><rect x="450" y="136" width="16" height="16" rx="3"/><rect x="470" y="136" width="16" height="16" rx="3"/><rect x="490" y="136" width="16" height="16" rx="3"/><rect x="510" y="136" width="16" height="16" rx="3"/><rect x="530" y="136" width="16" height="16" rx="3"/><rect x="550" y="136" width="16" height="16" rx="3"/><rect x="570" y="136" width="16" height="16" rx="3"/>
+          <rect x="370" y="156" width="16" height="16" rx="3"/><rect x="390" y="156" width="16" height="16" rx="3"/><rect x="410" y="156" width="16" height="16" rx="3"/><rect x="430" y="156" width="16" height="16" rx="3"/><rect x="450" y="156" width="16" height="16" rx="3"/><rect x="470" y="156" width="16" height="16" rx="3"/><rect x="490" y="156" width="16" height="16" rx="3"/><rect x="510" y="156" width="16" height="16" rx="3"/><rect x="530" y="156" width="16" height="16" rx="3"/><rect x="550" y="156" width="16" height="16" rx="3"/><rect x="570" y="156" width="16" height="16" rx="3"/>
+        </g>
+        <text x="475" y="200" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">every output cell: its own core</text>
+        <text x="475" y="222" text-anchor="middle" font-size="17" fill="#64748b">same instruction, different data</text>
+      </g>
+      <g id="score7" class="sp-hide">
+        <rect x="90" y="286" width="460" height="70" rx="12" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="320" y="314" text-anchor="middle" font-size="18" fill="#047857" font-weight="700">MiniLM encoding 1,000 sentences:</text>
+        <text x="320" y="342" text-anchor="middle" font-size="17" fill="#047857" class="mono">CPU ≈ 12 s · T4 GPU ≈ 0.4 s — 30× from parallelism</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-rc-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-race7 svg",
+        caption: "#fig-rc-cap",
+        steps: [
+          { caption: "A CPU: few, powerful, flexible cores — a brigade of head chefs. Superb at logic; a matmul makes them queue." },
+          { caption: "A GPU: a vast grid of simple cores executing the SAME multiply-add on different cells simultaneously — a stadium of line cooks, perfect for M1.3's independent dot products.", show: ["#gpu"] },
+          { caption: "The difference on your actual workload: 30× on embedding throughput. This asymmetry — not intelligence, just parallel arithmetic — is the entire hardware story of the AI era.", show: ["#score7"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Batching: keep the stadium full</h2>
+
+  <p>
+    Here's the operational insight that follows: a GPU processing ONE sentence uses a
+    sliver of its cores — the rest idle. Stack 64 sentences into one (64, n, d) tensor
+    and the same pass fills the hardware; total time barely moves. <strong>Latency per
+    batch ≈ flat (until saturation), so throughput ≈ linear in batch size.</strong>
+    That's why every inference framework batches (your <code>model.encode(list)</code>
+    call, DataLoaders in training, vLLM's continuous batching for LLM serving —
+    M7.5), and why "GPU utilization: 8%" in nvidia-smi usually means "your batches are
+    too small," not "you need a bigger GPU."
+  </p>
+  <p>
+    The memory hierarchy sets the limits: <strong>VRAM</strong> (GPU's own memory,
+    16–80GB — everything computed must live here), <strong>RAM</strong> (CPU side,
+    connected by a comparatively slow PCIe pipe), <strong>disk</strong>. Two practical
+    corollaries: batch size is capped by VRAM (activations scale with batch — next
+    page's math), and shuttling data CPU↔GPU mid-computation is a classic silent
+    performance killer (why preprocessing pipelines and <code>pin_memory</code>
+    exist).
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Hardware you'll see quoted, calibrated: consumer RTX 4090 — 24GB VRAM, ~80 fp16
+      TFLOPs. Cloud T4 (free Colab) — 16GB, ~65. A100 — 40/80GB, ~312. H100 — 80GB,
+      ~1000 with fp8. Batching effect measured on MiniLM (T4): batch 1 →
+      ~90 sentences/s; batch 32 → ~1,800/s; batch 256 → ~2,600/s (saturation).
+      <strong>Same model, same chip, 29× throughput — free, from tensor shape
+      alone.</strong>
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      You've lived this page without the vocabulary: embedding your RAG corpus
+      one-document-at-a-time in a loop vs passing the whole list to
+      <code>encode()</code> — the 20× speedup you may have stumbled into was batching
+      filling the stadium. GPU-poor? MiniLM's 22M params run fine on CPU precisely
+      because it's small (M6.5's "representation is cheap") — but the moment you embed
+      millions of documents, this page is your capacity plan. And the (batch, heads,
+      n, n) attention tensor you met above is the exact object the KV cache (M11.2)
+      exists to avoid recomputing.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: measure the batching curve yourself</div>
+<pre><code>import time
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("all-MiniLM-L6-v2")   # add device="cuda" if you have one
+texts = ["The quick brown fox jumps over the lazy dog."] * 2048
+
+for bs in [1, 8, 32, 128, 512]:
+    t0 = time.perf_counter()
+    model.encode(texts, batch_size=bs, show_progress_bar=False)
+    dt = time.perf_counter() - t0
+    print(f"batch {bs:4d}: {len(texts)/dt:7.0f} sentences/sec")
+</code></pre>
+    <p>
+      Plot sentences/sec vs batch size mentally: steep rise, then plateau — the
+      stadium filling, then full. Find where YOUR hardware saturates; that number is
+      your default batch size for every embedding job from now on. (On CPU the curve
+      is flatter but real — vector instructions batch too.)
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Transformers are tensors — (batch, seq, hidden) — flowing through matmuls; GPUs win
+    because matmuls decompose into thousands of identical independent operations; and
+    <strong>batching is how you keep the cores fed</strong>: near-flat latency,
+    near-linear throughput, capped by VRAM. Half of all "make it faster" answers in
+    this field reduce to "bigger batches, fewer CPU↔GPU trips."
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Why are GPUs so much faster than CPUs for deep learning?</summary>
+      <div><p>Deep learning is dominated by matrix multiplication — millions of independent, identical multiply-add operations with no branching. GPUs provide thousands of simple cores executing the same instruction on different data (plus high-bandwidth memory and, on modern chips, dedicated matmul units — tensor cores), matching the workload's structure exactly. CPUs' few sophisticated cores optimize for branching and latency, which matmuls don't need. It's workload-shape alignment, not raw superiority — CPUs still win at irregular logic.</p></div>
+    </details>
+    <details>
+      <summary>Walk the activation shapes through one transformer layer for batch 32, seq 128, d 384, 12 heads.</summary>
+      <div><p>Input (32,128,384). Q/K/V projections keep (32,128,384), reshaped per head to (32,12,128,32). Scores QKᵀ: (32,12,128,128) — the O(n²) object. Softmax same shape; ×V back to (32,12,128,32); concat + W_O → (32,128,384). FFN: → (32,128,1536) → GELU → (32,128,384). Residuals preserve shape throughout. Fluent shape-narration is a strong systems-competence signal.</p></div>
+    </details>
+    <details>
+      <summary>Why does increasing batch size raise throughput without (initially) raising latency?</summary>
+      <div><p>Small batches leave most GPU cores idle — the pass takes roughly the kernel-launch + memory-traffic floor regardless. Growing the batch assigns more independent output cells to idle cores; wall-time per pass stays near-flat until cores/bandwidth saturate, so items-per-second scales ~linearly. Past saturation, latency grows linearly and throughput plateaus. Limits: VRAM (activations scale with batch) and, for user-facing serving, the latency SLO — hence dynamic/continuous batching systems that balance both (M7.5).</p></div>
+    </details>
+    <details>
+      <summary>Your GPU shows 10% utilization during training. Diagnose.</summary>
+      <div><p>The GPU is starving, not weak. Checklist: (1) batch too small — grow it or use gradient accumulation; (2) data pipeline bottleneck — CPU preprocessing/dataloading can't keep up (more workers, pre-tokenize, pin memory); (3) excessive CPU↔GPU transfers or synchronizations (item-by-item .cpu() calls, printing tensors in the loop); (4) tiny model where kernel-launch overhead dominates — fuse ops or batch harder; (5) I/O — slow disk/network reads. Order matters: measure the dataloader first; it's the culprit most often.</p></div>
+    </details>
+    <details>
+      <summary>When is CPU inference the right choice?</summary>
+      <div><p>When the model is small relative to traffic: MiniLM-class encoders (~22M params) embed hundreds of sentences/sec on CPU — often enough, at zero GPU cost and simpler ops; same for small classifiers and rerankers at modest QPS. Also: strict data-locality environments, edge deployment, and quantized 7B-class LLMs for low-volume internal tools (M11.3's llama.cpp world). The engineering answer is arithmetic: required throughput × model FLOPs vs hardware cost — not reflexive GPU-by-default.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

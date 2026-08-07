@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Model Zoo Map — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="06-model-families/the-model-zoo-map">
+<main id="content">
+
+  <h1>The Model Zoo Map</h1>
+
+  <p>
+    Module capstone: turn family knowledge into navigation skill. Hugging Face hosts a
+    million-plus models; interviews ask "which model would you pick and why"; and both
+    are easy once you see the zoo as <strong>one family tree with three branches and a
+    handful of naming conventions</strong>. This page is the map, the model-card reading
+    protocol, and your decision cheat-sheet.
+  </p>
+
+  <h2>The family tree, 2013 → now</h2>
+
+  <figure class="anim" id="fig-tree">
+    <div class="fig-title">Animation · Your tools, placed on the tree</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-tr-t">
+      <title id="fig-tr-t">The NLP model family tree growing from word2vec to modern branches</title>
+      <!-- trunk -->
+      <g id="trunk">
+        <rect x="250" y="356" width="140" height="40" rx="10" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+        <text x="320" y="382" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">word2vec 2013</text>
+        <line x1="320" y1="352" x2="320" y2="316" stroke="#94a3b8" stroke-width="3"/>
+        <rect x="240" y="276" width="160" height="40" rx="10" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+        <text x="320" y="302" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">transformer 2017</text>
+      </g>
+      <!-- three branches -->
+      <g id="branches" class="sp-hide">
+        <line x1="270" y1="276" x2="130" y2="226" stroke="#93c5fd" stroke-width="3"/>
+        <line x1="320" y1="272" x2="320" y2="230" stroke="#fcd34d" stroke-width="3"/>
+        <line x1="370" y1="276" x2="510" y2="226" stroke="#6ee7b7" stroke-width="3"/>
+        <rect x="50" y="186" width="160" height="40" rx="10" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+        <text x="130" y="212" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">BERT 2018 (enc)</text>
+        <rect x="245" y="186" width="150" height="40" rx="10" fill="#fef3c7" stroke="#fcd34d" stroke-width="2"/>
+        <text x="320" y="212" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">GPT 2018 (dec)</text>
+        <rect x="440" y="186" width="140" height="40" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+        <text x="510" y="212" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">T5 2019 (e+d)</text>
+      </g>
+      <!-- leaves: your tools -->
+      <g id="leaves" class="sp-hide">
+        <line x1="100" y1="186" x2="80" y2="126" stroke="#93c5fd" stroke-width="2.5"/>
+        <line x1="160" y1="186" x2="185" y2="126" stroke="#93c5fd" stroke-width="2.5"/>
+        <rect x="20" y="86" width="120" height="40" rx="10" fill="#2563eb"/>
+        <text x="80" y="112" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">all-MiniLM ★</text>
+        <rect x="150" y="86" width="105" height="40" rx="10" fill="#2563eb"/>
+        <text x="202" y="112" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">GLiNER ★</text>
+        <line x1="320" y1="186" x2="320" y2="126" stroke="#fcd34d" stroke-width="2.5"/>
+        <rect x="265" y="86" width="205" height="40" rx="10" fill="#d97706"/>
+        <text x="367" y="112" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">your chatbot's LLM ★</text>
+        <line x1="510" y1="186" x2="530" y2="126" stroke="#6ee7b7" stroke-width="2.5"/>
+        <rect x="490" y="86" width="110" height="40" rx="10" fill="#059669"/>
+        <text x="545" y="112" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">Whisper</text>
+      </g>
+      <g id="lbl-one" class="sp-hide">
+        <rect x="110" y="24" width="420" height="36" rx="10" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="320" y="48" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">every ★ you use daily — one tree, three branches, zero mystery</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-tr-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-tree svg",
+        caption: "#fig-tr-cap",
+        steps: [
+          { caption: "The trunk: word2vec proved meaning-from-context (M2); the transformer supplied the machine (M5)." },
+          { caption: "2018–19: the trunk splits into the three silhouettes you know — encoder, decoder, encoder-decoder — each with its native objective (MLM, causal, span corruption).", show: ["#branches"] },
+          { caption: "And your daily tools are just leaves: MiniLM and GLiNER on the encoder branch, your chatbot's LLM on the decoder branch, Whisper on enc-dec.", show: ["#leaves"] },
+          { caption: "That's the entire zoo taxonomy. Everything else — RoBERTa, Llama, Qwen, Mistral, bge, DeBERTa — is a cultivar of one of these three branches, differing in recipe, scale and tuning.", show: ["#lbl-one"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Reading a model card like a mechanic</h2>
+
+  <p>Five questions, in order, answerable from any decent Hugging Face model card:</p>
+  <ol>
+    <li><strong>Architecture &amp; size</strong> — which branch (check config.json: is there a causal mask? enc+dec?), how many parameters (memory and latency, via M7.2's math).</li>
+    <li><strong>Objective &amp; training data</strong> — MLM/causal/contrastive? on what corpus, with what cutoff and languages?</li>
+    <li><strong>Checkpoint stage</strong> — <em>base</em> (raw pretrain — completes text, doesn't chat), <em>instruct/chat</em> (M8.3–8.4 applied), or task-tuned (like all-MiniLM's contrastive stage)? Downloading a base when you need instruct is the classic beginner faceplant.</li>
+    <li><strong>Evals</strong> — which benchmarks, and are they the right ones for <em>your</em> task (M11.4's skepticism applies)?</li>
+    <li><strong>License</strong> — Apache/MIT (free), Llama-style community licenses (restrictions), research-only. This one ends projects; check it first in commercial work.</li>
+  </ol>
+
+  <h2>Decoding model names</h2>
+
+  <p>
+    Names are compressed spec sheets. <code>Llama-3.1-70B-Instruct</code>: family +
+    version + 70 billion parameters + chat-tuned. <code>all-MiniLM-L6-v2</code>
+    (fully decoded at last): "all" = trained on all 1B+ sentence pairs of the
+    sentence-transformers project; "MiniLM" = Microsoft's distilled architecture
+    (M9.4); "L6" = 6 layers; "v2" = second training recipe.
+    <code>bge-large-en-v1.5</code>: BAAI general embedder, large size, English, v1.5.
+    Suffixes that matter: <code>-Instruct/-Chat</code> (tuned to converse),
+    <code>-Base</code> (raw), <code>-GGUF/-AWQ/-GPTQ</code> (quantized formats, M11.3),
+    <code>distil-</code> (M9.4's technique). What "B" buys — capability vs cost —
+    is exactly M7's business, next module.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers: the zoo at a glance</div>
+    <p>
+      Encoder branch (understand/embed): MiniLM <strong>22M</strong> · BERT-base
+      <strong>110M</strong> · bge-large <strong>335M</strong> — the branch tops out
+      small because vectors don't need trillion-token worldliness. Decoder branch
+      (generate): Qwen-0.5B → Llama-3-8B → 70B → frontier <strong>100B–1T+</strong>.
+      Enc-dec: Flan-T5 60M–11B, Whisper 1.5B. Rule of thumb from the spread:
+      <strong>representation is cheap, generation is expensive, and a 5,000×
+      size gap between your embedder and your LLM is normal architecture</strong> —
+      your own stack is proof.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Next time you're on a model page, run the five questions live — you'll notice
+      you now recognize every field: config.json (M5.6), tokenizer files (M5.1),
+      the safetensors sizes (M1.3: matrices, serialized), benchmark tables (M3.6's
+      skepticism + M11.4 soon), and the base-vs-instruct distinction (M6.3's build
+      showed you the raw behavior). The zoo stopped being a zoo; it's a parts
+      catalog and you know the part numbers.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: audit three model cards with the protocol</div>
+<pre><code>from huggingface_hub import model_info
+
+for name in ["sentence-transformers/all-MiniLM-L6-v2",
+             "meta-llama/Llama-3.1-8B-Instruct",
+             "urchade/gliner_medium-v2.1"]:
+    info = model_info(name)
+    print("\n" + "="*60, "\n", name)
+    print("  downloads/mo:", f"{info.downloads:,}")
+    print("  license     :", getattr(info.card_data, "license", "?"))
+    print("  tags        :", [t for t in info.tags[:8]])
+</code></pre>
+    <p>
+      Then open each card in a browser and answer the five questions in writing —
+      ten minutes total. The MiniLM card especially rewards a re-read now: its
+      training-data table, pooling description, and "intended uses" section are
+      all M9 previews you can already mostly decode.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    One tree: word2vec → transformer → three branches (encoder/MLM, decoder/causal,
+    enc-dec/denoising) → everything else is recipe, scale and tuning stage. Read any
+    model via five questions — branch &amp; size, objective &amp; data, checkpoint
+    stage, evals, license — and never confuse a base model with an assistant again.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>You need (a) semantic search, (b) a support chatbot, (c) transcription. Name model families and why.</summary>
+      <div><p>(a) Encoder-branch embedder — MiniLM/bge class: bidirectional context, vectors as output, cheap at volume; plus optionally a cross-encoder reranker (M12.2). (b) Decoder-branch instruct model — Llama/Qwen/frontier API: generation + instruction-following; RAG on top for current knowledge. (c) Enc-dec Whisper-class: full audio encoded bidirectionally, text decoded with cross-attention. Bonus point for noting (a) and (b) coexist in one product — different branches for different layers.</p></div>
+    </details>
+    <details>
+      <summary>What's the difference between a base and an instruct checkpoint, practically?</summary>
+      <div><p>Base: raw pretrained next-token predictor — continues text, won't reliably answer questions, follow instructions, or refuse anything; intended as a substrate for further tuning or research. Instruct/chat: same weights pushed through SFT (+usually preference tuning) so it answers, follows formats, and behaves like an assistant. Practical failure mode: pointing a product at a base checkpoint and concluding "the model is bad." Always check the suffix and the card's stage.</p></div>
+    </details>
+    <details>
+      <summary>Why do embedding models stay small (20M–350M) while chat models grow to hundreds of billions?</summary>
+      <div><p>Task demands differ: an embedder must map text into a well-shaped similarity space — largely a language-structure task where bidirectional context and contrastive tuning (M9) matter more than encyclopedic knowledge or reasoning depth. Generation quality, world knowledge and reasoning scale strongly with parameters (M7.4). Economics reinforce it: embedders run per-document over entire corpora (cost scales with data), chat models per-conversation. Different scaling pressures → a 1000× size gap that's correct, not accidental.</p></div>
+    </details>
+    <details>
+      <summary>Decode "all-MiniLM-L6-v2" and "Llama-3.1-70B-Instruct" fully.</summary>
+      <div><p>all-MiniLM-L6-v2: sentence-transformers model trained on the "all" collection of 1B+ text pairs (contrastive, M9.3), MiniLM architecture (deep self-attention distillation from a larger teacher, M9.4), 6 transformer encoder layers (M5.6), second recipe version. Llama-3.1-70B-Instruct: Meta's Llama family, generation 3.1, 70 billion parameters, instruction/chat-tuned (M8.3–8.4) decoder-only model. Being able to unpack names into architecture + training story is exactly the fluency this module builds.</p></div>
+    </details>
+    <details>
+      <summary>What do you check FIRST on a model card for commercial use, and what trips teams up?</summary>
+      <div><p>License. Trip-ups: "open" ≠ permissive (Llama licenses carry use restrictions and user thresholds), research-only models leaking into production, embedding models trained on datasets with their own terms, and GGUF re-uploads inheriting (or mislabeling) the original license. Second check: the checkpoint stage (base vs instruct). Third: eval relevance to your task. An engineer who says "license first" signals production scars — in a good way.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

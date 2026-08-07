@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inference Economics — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="07-compute-and-scale/inference-economics">
+<main id="content">
+
+  <h1>Inference Economics</h1>
+
+  <p>
+    Module capstone, and the page closest to your invoices. Training happens once;
+    <strong>inference is forever</strong> — and its costs have a precise anatomy:
+    two phases with opposite bottlenecks, a pricing asymmetry you've already paid
+    without knowing why, and one serving trick (continuous batching) that decides
+    whether a GPU serves 3 users or 40. By the end, you'll price your own RAG queries
+    from first principles.
+  </p>
+
+  <h2>Two phases, opposite bottlenecks</h2>
+
+  <p>
+    M5.7 split generation into <strong>prefill</strong> (the whole prompt in one
+    parallel pass) and <strong>decode</strong> (one serial pass per output token).
+    The systems view adds the crucial detail: they stress different hardware limits.
+    Prefill is <strong>compute-bound</strong> — big (n × d) matmuls saturate the cores;
+    the GPU is genuinely busy. Decode is <strong>memory-bandwidth-bound</strong> —
+    to produce ONE token, every one of the model's ~16 GB of weights must be read from
+    VRAM into the compute units, for a comparatively tiny matmul. The chip spends
+    decode-time <em>waiting on memory</em>, not computing. This single asymmetry
+    explains most of serving engineering.
+  </p>
+
+  <figure class="anim" id="fig-phase">
+    <div class="fig-title">Animation · Prefill gulps, decode sips</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-ph-t">
+      <title id="fig-ph-t">Prefill parallel burst then serial decode drip</title>
+      <!-- timeline -->
+      <line x1="40" y1="200" x2="610" y2="200" stroke="#cbd5e1" stroke-width="2.5"/>
+      <text x="325" y="230" text-anchor="middle" font-size="17" fill="#64748b">time →</text>
+      <!-- prefill block -->
+      <g id="prefill">
+        <rect x="40" y="120" width="90" height="80" rx="8" fill="#2563eb"/>
+        <text x="85" y="155" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">PREFILL</text>
+        <text x="85" y="178" text-anchor="middle" font-size="17" fill="#bfdbfe">2,000 tokens</text>
+        <text x="85" y="106" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">one parallel gulp</text>
+      </g>
+      <!-- decode drips -->
+      <g id="decode" class="sp-hide">
+        <g fill="#d97706">
+          <rect x="150" y="160" width="26" height="40" rx="5"/>
+          <rect x="192" y="160" width="26" height="40" rx="5"/>
+          <rect x="234" y="160" width="26" height="40" rx="5"/>
+          <rect x="276" y="160" width="26" height="40" rx="5"/>
+          <rect x="318" y="160" width="26" height="40" rx="5"/>
+          <rect x="360" y="160" width="26" height="40" rx="5"/>
+          <rect x="402" y="160" width="26" height="40" rx="5"/>
+          <rect x="444" y="160" width="26" height="40" rx="5"/>
+          <rect x="486" y="160" width="26" height="40" rx="5"/>
+          <rect x="528" y="160" width="26" height="40" rx="5"/>
+        </g>
+        <text x="360" y="140" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">DECODE: one full weight-read per token, serially</text>
+      </g>
+      <g id="labels-ph" class="sp-hide">
+        <rect x="40" y="258" width="270" height="96" rx="12" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="175" y="286" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">prefill: compute-bound</text>
+        <text x="175" y="312" text-anchor="middle" font-size="17" fill="#1d4ed8">cores saturated by matmuls</text>
+        <text x="175" y="336" text-anchor="middle" font-size="17" fill="#1d4ed8">sets time-to-first-token</text>
+        <rect x="330" y="258" width="280" height="96" rx="12" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="470" y="286" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">decode: bandwidth-bound</text>
+        <text x="470" y="312" text-anchor="middle" font-size="17" fill="#b45309">16 GB of weights read per token</text>
+        <text x="470" y="336" text-anchor="middle" font-size="17" fill="#b45309">sets tokens/second</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-ph-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-phase svg",
+        caption: "#fig-ph-cap",
+        steps: [
+          { caption: "Your 2,000-token RAG prompt arrives: prefill processes ALL of it in one parallel pass — a fraction of a second of genuinely saturated GPU." },
+          { caption: "Then decode: each output token requires streaming the ENTIRE model's weights through the compute units for one small matmul. Serial drips, ~20–100 tokens/sec.", show: ["#decode"] },
+          { caption: "Two phases, two bottlenecks, two user-visible metrics: prefill sets time-to-first-token; decode's bandwidth-bound drip sets the streaming rate. Every serving optimization targets one or the other.", show: ["#labels-ph"], holdMs: 6200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Why output tokens cost 3–5× input tokens</h2>
+
+  <p>
+    Now the pricing sheet decodes itself. Input (prefill) tokens amortize beautifully:
+    thousands processed per weight-read, hardware saturated, cheap per token.
+    Output (decode) tokens each demand a full pass with terrible hardware utilization —
+    plus they hold the GPU (and a growing KV cache, M11.2) for the whole generation.
+    Providers price accordingly: input cheap, output dear. Design consequence you can
+    apply tomorrow: <strong>fat prompts are far more affordable than fat outputs</strong>
+    — stuffing 10 retrieved chunks into context costs less than asking for a
+    needlessly verbose answer.
+  </p>
+
+  <h2>Continuous batching: the trick that made serving profitable</h2>
+
+  <p>
+    Naive serving runs one conversation per GPU — and decode's bandwidth-boundness
+    means 95% idle compute. The fix mirrors M7.1: <strong>batch many users'
+    decode steps together</strong> — one weight-read serves 40 conversations' next
+    tokens simultaneously. The refinement that made it practical (vLLM's
+    <em>continuous batching</em>): don't wait for a batch to finish together; as any
+    conversation completes, its slot is instantly refilled by a waiting request —
+    a conveyor, not a bus. Add paged KV-cache memory management and GPU throughput
+    rises ~10–25× versus naive serving. This, more than any model improvement, is why
+    per-token API prices fell ~100× in three years.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers: pricing one of your RAG queries</div>
+    <p>
+      Anatomy of a typical query — embed the question (MiniLM, self-hosted:
+      ~<strong>$0.000001</strong>, effectively free) → vector search (infrastructure,
+      ~free at your scale) → LLM call: 2,000 input tokens + 300 output. At
+      representative mid-tier API prices (~$0.25/M input, ~$1.25/M output):
+      input <strong>$0.0005</strong> + output <strong>$0.000375</strong> ≈
+      <strong>$0.0009 per query</strong> — the output's 300 tokens cost nearly as much
+      as the input's 2,000 (the 3–5× asymmetry, live). At 100k queries/month: ~$90.
+      Doubling retrieved context: +$50/mo. Halving answer length: −$19/mo <em>and</em>
+      faster. You can now do this arithmetic for any provider's price sheet.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Behaviors you've observed, now explained: the long pause before the first word
+      on big prompts (prefill of YOUR fat RAG context), then smooth streaming
+      (decode's steady drip); why <code>max_tokens</code> caps cost meaningfully but
+      prompt trimming often matters less than you'd think; why batch-embedding your
+      corpus was cheap but the LLM layer dominates your bill. And a strategic one:
+      M7.4's "overtrained small models" exist precisely because decode cost scales
+      with parameters — the whole industry is arranged around this page's asymmetry.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: a cost model for your actual pipeline</div>
+<pre><code>def rag_query_cost(input_toks=2000, output_toks=300,
+                   price_in=0.25, price_out=1.25,      # $ per million tokens
+                   queries_per_month=100_000):
+    per_query = input_toks/1e6*price_in + output_toks/1e6*price_out
+    monthly = per_query * queries_per_month
+    print(f"per query: ${per_query:.6f}  |  monthly: ${monthly:,.0f}")
+    print(f"  input share : {input_toks/1e6*price_in/per_query:5.1%}")
+    print(f"  output share: {output_toks/1e6*price_out/per_query:5.1%}")
+
+rag_query_cost()                                   # baseline
+rag_query_cost(input_toks=4000)                    # double the retrieved chunks
+rag_query_cost(output_toks=150)                    # tighter answers
+rag_query_cost(price_in=3.0, price_out=15.0)       # frontier-model prices
+</code></pre>
+    <p>
+      Plug in your real token counts (your API logs have them) and provider prices.
+      The output-share line is the punchline for most teams: verbosity is a line item.
+      Then try the frontier-price row and understand why model-tier choice (M6.5's
+      decision) is usually the biggest knob on the whole bill.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Inference = <strong>compute-bound prefill</strong> (sets first-token latency,
+    cheap per token) + <strong>bandwidth-bound decode</strong> (sets streaming speed,
+    expensive per token — hence the 3–5× output premium). Continuous batching packs
+    many users into each weight-read and is why serving economics work at all.
+    Training is a one-time cost; this page is the perpetuity — design your prompts,
+    outputs, and model tiers around it.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Why is LLM decode memory-bandwidth-bound rather than compute-bound?</summary>
+      <div><p>Generating one token requires reading ALL model weights from VRAM (every layer participates) to perform relatively small matmuls (batch 1 × one position). Arithmetic intensity (FLOPs per byte moved) is far below the GPU's compute/bandwidth ratio, so the cores idle waiting on memory — an H100 doing single-stream decode may use &lt;5% of its FLOPs. Prefill, processing thousands of positions per weight-read, has high arithmetic intensity and is compute-bound. Remedies for decode: batch users (share the weight-read), quantize (fewer bytes, M11.3), speculative decoding.</p></div>
+    </details>
+    <details>
+      <summary>Explain the input-vs-output token pricing asymmetry from first principles.</summary>
+      <div><p>Input tokens are processed in parallel prefill — thousands per full weight-read, hardware saturated, low marginal cost. Each output token needs its own serial, bandwidth-bound pass, occupies the GPU and KV-cache memory for the generation's duration, and limits batching flexibility. Provider cost per output token is genuinely several times higher, and pricing (3–5×) mirrors it. Design corollary: rich context is cheap, verbose generation is not — push work into prompts, constrain outputs.</p></div>
+    </details>
+    <details>
+      <summary>What is continuous batching and why was it such a leap?</summary>
+      <div><p>Serving technique (popularized by vLLM/Orca): compose each decode step's batch dynamically across active conversations — when any sequence finishes, immediately admit a queued one, rather than waiting for whole-batch completion. Combined with paged KV-cache allocation (fragmentation-free), it keeps the weight-read amortized across a full batch at all times: ~10–25× throughput over static batching, directly translating to the ~100× per-token price drops of 2022–2025. It attacks decode's bandwidth-boundness with M7.1's batching principle, applied continuously.</p></div>
+    </details>
+    <details>
+      <summary>Your product's time-to-first-token is bad but streaming is smooth. Diagnose and fix.</summary>
+      <div><p>TTFT ≈ queueing + prefill; smooth streaming means decode is fine. Suspects: prompt too large (your RAG stuffing — trim/rerank chunks harder, M12.2), cold model loading, queue contention at the provider, or no prefix caching (many providers/servers cache shared system-prompt prefixes — restructure prompts so the static part leads and stays byte-identical). Measure: log prompt tokens vs TTFT correlation; if linear, it's prefill — cut context or pick a faster tier. The question tests whether you map user metrics onto the two phases.</p></div>
+    </details>
+    <details>
+      <summary>Self-host an 8B or call an API — how do you frame the decision quantitatively?</summary>
+      <div><p>Compute both cost curves: API = tokens/month × prices (linear, zero fixed cost, elastic). Self-host = GPU cost (e.g., ~$1–2/hr for a 24–48 GB card) ÷ achievable throughput (with continuous batching, maybe 1–5k tokens/s aggregate) → cost per M tokens, plus engineering time. Break-even typically lands at sustained utilization: bursty/low volume → API wins; steady high volume, latency control, or data-locality needs → self-host wins. State the assumptions (utilization %, batching efficiency) — the framework matters more than the number.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

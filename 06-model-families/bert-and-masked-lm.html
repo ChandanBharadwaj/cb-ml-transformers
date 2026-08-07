@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BERT &amp; Masked Language Modeling — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="06-model-families/bert-and-masked-lm">
+<main id="content">
+
+  <h1>BERT &amp; Masked Language Modeling</h1>
+
+  <p>
+    2018, the encoder's big moment. BERT took your M5 encoder stack and asked: what
+    pretraining game fits a model that <em>sees both directions</em>? Next-token
+    prediction is out — a bidirectional model would just read the answer (5.7's
+    cheating problem). The solution, masked language modeling, is a cloze test at
+    internet scale — and it produced the ancestor of both models you use daily:
+    MiniLM and GLiNER's backbone.
+  </p>
+
+  <h2>MLM: the fill-in-the-blank game</h2>
+
+  <p>
+    Take a sentence, hide 15% of its tokens, ask the model to reconstruct them —
+    using context from <strong>both sides</strong>. Loss = cross-entropy on the hidden
+    positions only. That's masked language modeling. The bidirectionality that
+    disqualified BERT from generation becomes its superpower here: every blank is
+    solved with full-sentence evidence, forcing representations that integrate
+    left and right context — exactly what understanding tasks need.
+  </p>
+
+  <figure class="anim" id="fig-mlm">
+    <div class="fig-title">Animation · The cloze test, both barrels</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-mlm-t">
+      <title id="fig-mlm-t">Masked token predicted from bidirectional evidence</title>
+      <!-- sentence with mask -->
+      <g class="mono">
+        <text x="70"  y="80" text-anchor="middle" font-size="18" class="sv-ink">The</text>
+        <text x="160" y="80" text-anchor="middle" font-size="18" class="sv-ink">doctor</text>
+        <rect x="230" y="52" width="110" height="42" rx="9" fill="#1e293b"/>
+        <text x="285" y="80" text-anchor="middle" font-size="18" fill="#fbbf24">[MASK]</text>
+        <text x="395" y="80" text-anchor="middle" font-size="18" class="sv-ink">the</text>
+        <text x="500" y="80" text-anchor="middle" font-size="18" class="sv-ink">patient's</text>
+        <text x="590" y="80" text-anchor="middle" font-size="18" class="sv-ink">leg</text>
+      </g>
+      <!-- left evidence -->
+      <g id="ev-left" class="sp-hide">
+        <path d="M 165 92 C 200 130, 240 130, 275 100" fill="none" stroke="#2563eb" stroke-width="4" marker-end="url(#ml-b)"/>
+        <text x="175" y="140" font-size="17" fill="#1d4ed8" font-weight="700">left: "doctor" →</text>
+      </g>
+      <!-- right evidence -->
+      <g id="ev-right" class="sp-hide">
+        <path d="M 495 92 C 430 140, 350 135, 300 102" fill="none" stroke="#d97706" stroke-width="4" marker-end="url(#ml-o)"/>
+        <text x="440" y="150" font-size="17" fill="#b45309" font-weight="700">← right: "patient's leg"</text>
+      </g>
+      <!-- predictions -->
+      <g id="preds" class="sp-hide">
+        <rect x="150" y="190" width="340" height="120" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="218" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">P([MASK]) with BOTH sides:</text>
+        <g class="mono">
+          <text x="320" y="248" text-anchor="middle" font-size="17" fill="#047857">examined .41 · bandaged .17</text>
+          <text x="320" y="274" text-anchor="middle" font-size="17" fill="#64748b">treated .12 · x-rayed .09 …</text>
+        </g>
+        <text x="320" y="300" text-anchor="middle" font-size="17" fill="#64748b">loss computed on this position ONLY</text>
+      </g>
+      <g id="why-not" class="sp-hide">
+        <rect x="60" y="330" width="520" height="38" rx="10" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="320" y="355" text-anchor="middle" font-size="17" fill="#b91c1c">left-only ("The doctor ___") could be anything — bidirectional evidence is the point</text>
+      </g>
+      <defs>
+        <marker id="ml-b" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#2563eb"/></marker>
+        <marker id="ml-o" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#d97706"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-mlm-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-mlm svg",
+        caption: "#fig-mlm-cap",
+        steps: [
+          { caption: "One token hidden behind [MASK]. The model must reconstruct it — 15% of all tokens get this treatment." },
+          { caption: "Evidence flows from the left: 'The doctor' suggests a medical verb…", show: ["#ev-left"] },
+          { caption: "…AND from the right: 'the patient's leg' narrows it dramatically. This right-side flow is exactly what a causal decoder can never use.", show: ["#ev-right"] },
+          { caption: "The model distributes probability over its vocabulary for the blank; cross-entropy on masked positions is the whole training signal.", show: ["#preds"] },
+          { caption: "Cover the right side and feel the difference — 'The doctor ___' is wide open. Bidirectional context is why encoder vectors are so much richer per token, and why BERT swept every understanding benchmark in 2018.", show: ["#why-not"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The 80/10/10 trick (a real interview favorite)</h2>
+
+  <p>
+    Subtlety: if masked positions were <em>always</em> shown as [MASK], the model would
+    learn "only compute hard when I see the [MASK] token" — but at fine-tuning and
+    inference time, [MASK] never appears, so those habits would misfire. BERT's fix:
+    of the 15% selected positions, <strong>80%</strong> become [MASK], <strong>10%</strong>
+    are swapped for a <em>random</em> word, and <strong>10%</strong> are left
+    <em>unchanged</em> — but all 15% must be predicted. Consequence: the model can
+    never trust any token fully and must maintain rich contextual representations
+    for <em>every</em> position. A tiny recipe detail that materially decides
+    representation quality.
+  </p>
+
+  <h2>Anatomy: [CLS], [SEP], and the NSP detour</h2>
+
+  <p>
+    BERT's inputs carry two special tokens you've seen in every tokenizer dump:
+    <strong>[CLS]</strong> prepended (a workspace position whose final vector serves as
+    a whole-sequence summary — the classification handle) and <strong>[SEP]</strong>
+    marking boundaries between paired inputs (question/passage, sentence A/B).
+    Original BERT also trained a second objective — <strong>next sentence
+    prediction</strong> (did sentence B really follow A?) — which RoBERTa (2019) showed
+    was <em>unnecessary</em>: dropping NSP and just training MLM longer on more data
+    worked better. Worth knowing as the canonical example that pretraining recipes,
+    not just architectures, were still being debugged years after the transformer.
+  </p>
+  <p>
+    Family tree in three one-liners: <strong>RoBERTa</strong> = BERT minus NSP, plus
+    10× data and tuning — same architecture, better recipe. <strong>DistilBERT</strong>
+    = BERT distilled to 6 layers, 40% smaller, ~97% of the quality (M9.4's technique).
+    <strong>ALBERT</strong> = parameter-sharing across layers — clever, memory-light,
+    now mostly historical. All are "BERT family": encoder + MLM.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Real fill-mask output from bert-base-uncased for <em>"The doctor [MASK] the
+      patient's leg"</em>: <code>examined .19 · treated .11 · amputated .09 ·
+      bandaged .07 · broke .05</code> — medical verbs dominating, both context sides
+      audibly at work. Training: 3.3B words, 1M steps, batch 256, ~4 days on 64 TPU
+      chips (2018 dollars: ~$7k of compute — quaint against Llama-3's ~$100M six years
+      later). The 15% mask rate: chosen empirically; later work (like ELECTRA's
+      all-positions objective) squeezed more signal per sentence.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      This page is your MiniLM's birth certificate, part 1: <strong>all-MiniLM-L6-v2's
+      backbone was pretrained exactly this way</strong> — WordPiece tokens, [CLS]/[SEP],
+      MLM over billions of words — before M9's distillation and contrastive tuning made
+      it an embedder. GLiNER's encoder: same story (M10). And a practical echo you've
+      already coded around: sentence-transformers' outputs include those special
+      tokens' positions — mean-pooling (M9.1) deliberately handles them. When you see
+      <code>[CLS]</code> in a tokenizer dump now, you know its job.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: play the MLM game against real BERT</div>
+<pre><code>from transformers import pipeline
+
+fill = pipeline("fill-mask", model="bert-base-uncased")
+
+for s in ["The doctor [MASK] the patient's leg.",
+          "The capital of Karnataka is [MASK].",
+          "I deposited money at the [MASK].",
+          "We sat on the river [MASK]."]:
+    print("\n" + s)
+    for r in fill(s, top_k=4):
+        print(f"   {r['token_str']:>12}  {r['score']:.3f}")
+</code></pre>
+    <p>
+      The last two prompts are M2.4's bank problem, interrogated directly: watch the
+      distribution shift between money-context and river-context. You're watching
+      bidirectional attention (M5.3's machinery) resolve the ambiguity that static
+      embeddings structurally couldn't — the entire course arc in four API calls.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    BERT = the M5 encoder + <strong>masked language modeling</strong>: hide 15%
+    (with the 80/10/10 twist), predict from both sides, loss on masked positions only.
+    Bidirectionality trades generation away for the richest per-token understanding —
+    which is why the BERT family became the embedding/classification/NER workhorse,
+    and why your MiniLM and GLiNER are its descendants.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Why can't BERT use next-token prediction, and why can't GPT use MLM's bidirectionality?</summary>
+      <div><p>BERT's attention is bidirectional — for next-token prediction every position could see its answer (5.7's cheating problem), so the objective would collapse. GPT's causal mask exists precisely to make next-token prediction honest, but it thereby denies right-context — it can't fill a blank using what follows. Objective and attention pattern must be chosen together: MLM ↔ bidirectional encoder, causal LM ↔ masked decoder.</p></div>
+    </details>
+    <details>
+      <summary>Explain the 80/10/10 masking strategy and its purpose.</summary>
+      <div><p>Of the 15% of positions selected for prediction: 80% are replaced with [MASK], 10% with a random token, 10% left unchanged — all still predicted. Purpose: [MASK] never appears downstream, so a model that only "works hard" at [MASK] positions would carry a train/test mismatch; random and unchanged variants force it to maintain full contextual representations everywhere and to distrust surface tokens. It's the classic "small detail, big representational consequence" question.</p></div>
+    </details>
+    <details>
+      <summary>What is the [CLS] token and is it automatically a good sentence embedding?</summary>
+      <div><p>A special position prepended to every input whose final hidden state is trained (via fine-tuning heads, originally NSP) to summarize the sequence — the standard hook for classification. But out-of-the-box it is NOT a good similarity embedding: without similarity-oriented training its geometry is poor (raw-BERT cosine scores are notoriously degenerate — the anisotropy problem, M9.1). Sentence-transformers exist precisely to fix this with pooling + contrastive fine-tuning.</p></div>
+    </details>
+    <details>
+      <summary>What did RoBERTa change and what's the lesson?</summary>
+      <div><p>Same architecture as BERT; recipe changes only: drop NSP, train much longer on ~10× data, bigger batches, dynamic masking (re-mask each epoch), byte-level BPE. Result: substantially better across the board. Lesson: pretraining hyperparameters and data scale can matter as much as architecture — "BERT was undertrained" — and claims of architectural superiority need recipe-controlled comparisons. A favorite question for probing whether candidates separate architecture from training effects.</p></div>
+    </details>
+    <details>
+      <summary>When would you reach for a BERT-family model in 2025+ instead of an LLM?</summary>
+      <div><p>Whenever the output is a vector or a label rather than prose, at volume: embeddings/retrieval (MiniLM-class models embed thousands of texts/sec on CPU), classification, NER (M10), reranking (M12.2) — at 1/100th to 1/1000th the serving cost of a decoder LLM, with bidirectional context that's genuinely better per token for understanding. The mature answer: LLMs for generation and complex reasoning; encoders for the high-QPS representation layer underneath — most production stacks (including the candidate's own RAG) run both.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

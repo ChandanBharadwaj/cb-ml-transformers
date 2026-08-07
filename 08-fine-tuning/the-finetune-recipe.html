@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Fine-tune Recipe — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="08-fine-tuning/the-finetune-recipe">
+<main id="content">
+
+  <h1>The Fine-tune Recipe</h1>
+
+  <p>
+    The practitioner's page: everything between "I have data" and "I have a model I
+    trust," in the order it actually matters. Spoiler with two decades of consensus
+    behind it: <strong>your data quality decides 80% of the outcome; hyperparameters
+    decide 15%; everything else is 5%</strong>. We'll spend the page in those
+    proportions — and finish with the skill of reading training curves like a
+    clinician.
+  </p>
+
+  <h2>Data first: the 80%</h2>
+
+  <p>
+    The checklist that outperforms any hyperparameter search: <strong>Consistency</strong> —
+    are labels applied by the same rules everywhere? (Have two people label 50 examples
+    independently; their disagreement rate is your model's ceiling.)
+    <strong>Deduplication</strong> — near-duplicates inflate confidence and leak across
+    splits (M3.3's sin). <strong>Coverage</strong> — does the data span the real
+    input distribution, including the ugly cases? A model only generalizes across
+    what it saw varied. <strong>Format hygiene</strong> — for generative tunes,
+    the format IS part of the behavior being learned; inconsistent formatting teaches
+    inconsistency. <strong>The split discipline</strong> — carve out validation and
+    test BEFORE looking at anything (temporal split if your data has time).
+    Every hour here beats a day of tuning.
+  </p>
+
+  <h2>Hyperparameters, ranked by how much they matter</h2>
+
+  <table>
+    <tr><th>Knob</th><th>BERT-class start</th><th>LLM-LoRA start</th><th>What going wrong looks like</th></tr>
+    <tr><td><strong>learning rate</strong></td><td>2e-5</td><td>1e-4 (adapters)</td><td>too high: spiky/NaN loss, forgetting · too low: crawling</td></tr>
+    <tr><td><strong>epochs</strong></td><td>2–4</td><td>1–3</td><td>too many: the diverging curves (below)</td></tr>
+    <tr><td><strong>batch size</strong></td><td>16–32</td><td>as VRAM allows + accumulation</td><td>mostly a memory/throughput knob (M3.3)</td></tr>
+    <tr><td>warmup</td><td>6–10% of steps</td><td>same</td><td>skipped: early instability (M3.5)</td></tr>
+    <tr><td>weight decay</td><td>0.01</td><td>0–0.01</td><td>rarely the problem</td></tr>
+  </table>
+
+  <p>
+    The honest tuning procedure: defaults first → if underfit (both losses high),
+    raise LR or epochs → if overfit (curves diverge), lower epochs, add data, or
+    regularize → sweep LR across {1e-5, 2e-5, 5e-5} only if the eval justifies the
+    compute. Grid-searching five knobs on 2k examples is how you overfit the
+    validation set (M3.3's leakage-by-experimenter) while feeling productive.
+  </p>
+
+  <h2>Reading curves like a clinician</h2>
+
+  <figure class="anim" id="fig-path">
+    <div class="fig-title">Animation · Four loss-curve pathologies (memorize these shapes)</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-pt8-t">
+      <title id="fig-pt8-t">Healthy, overfit, LR-too-high and data-bug loss curve shapes</title>
+      <!-- quadrant frames -->
+      <g id="frames">
+        <rect x="24" y="30" width="290" height="160" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <rect x="326" y="30" width="290" height="160" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <rect x="24" y="210" width="290" height="160" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <rect x="326" y="210" width="290" height="160" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+      </g>
+      <!-- 1 healthy -->
+      <g id="q1">
+        <text x="169" y="54" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">① healthy</text>
+        <path d="M 45 70 C 110 130, 180 155, 295 165" fill="none" stroke="#2563eb" stroke-width="3"/>
+        <path d="M 45 78 C 110 140, 180 162, 295 172" fill="none" stroke="#d97706" stroke-width="3"/>
+        <text x="169" y="185" text-anchor="middle" font-size="17" fill="#64748b">both fall, small steady gap</text>
+      </g>
+      <!-- 2 overfit -->
+      <g id="q2" class="sp-hide">
+        <text x="471" y="54" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">② overfitting</text>
+        <path d="M 347 70 C 420 130, 500 158, 597 168" fill="none" stroke="#2563eb" stroke-width="3"/>
+        <path d="M 347 78 C 420 140, 470 150, 500 140 C 540 126, 570 105, 597 85" fill="none" stroke="#d97706" stroke-width="3"/>
+        <text x="471" y="185" text-anchor="middle" font-size="17" fill="#64748b">val turns UP → stop earlier / more data</text>
+      </g>
+      <!-- 3 LR too high -->
+      <g id="q3" class="sp-hide">
+        <text x="169" y="234" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">③ LR too high</text>
+        <path d="M 45 260 L 80 330 L 115 280 L 150 345 L 185 295 L 220 350 L 260 310 L 295 340" fill="none" stroke="#2563eb" stroke-width="3"/>
+        <text x="169" y="365" text-anchor="middle" font-size="17" fill="#64748b">sawtooth / spikes / NaN → cut LR 3–10×</text>
+      </g>
+      <!-- 4 data bug -->
+      <g id="q4" class="sp-hide">
+        <text x="471" y="234" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">④ data bug</text>
+        <path d="M 347 265 L 597 268" fill="none" stroke="#2563eb" stroke-width="3"/>
+        <path d="M 347 272 L 597 275" fill="none" stroke="#d97706" stroke-width="3"/>
+        <text x="471" y="310" text-anchor="middle" font-size="17" fill="#64748b">flat at ln(C) from step 0 →</text>
+        <text x="471" y="332" text-anchor="middle" font-size="17" fill="#64748b">shuffled labels? wrong field? tokenizer mismatch?</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-pt8-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-path svg",
+        caption: "#fig-pt8-cap",
+        steps: [
+          { caption: "① Healthy: train (blue) and validation (orange) both falling, modest gap, flattening together. Ship the best-val checkpoint and go home." },
+          { caption: "② Overfitting: the M3.3 signature — train keeps improving, validation turns up. Prescription: earlier stopping, more/better data, or a gentler recipe. (With tiny datasets this appears by epoch 2 — that's WHY the default is 2–4.)", show: ["#q2"], holdMs: 6200 },
+          { caption: "③ LR too high: sawtooth, spikes, or NaN (M3.5's diagnosis list). Cut the learning rate 3–10× and add warmup before touching anything else.", show: ["#q3"] },
+          { caption: "④ The humbling one: loss flat at exactly ln(num_classes) — the model is learning NOTHING. Not a tuning problem: shuffled labels, reading the wrong column, tokenizer/model mismatch. Check data plumbing first, always.", show: ["#q4"], holdMs: 6200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Checkpoints, seeds, and honesty</h2>
+
+  <p>
+    Three habits that separate reliable results from lucky ones:
+    <strong>load_best_model_at_end</strong> — evaluate every epoch, keep the
+    best-validation checkpoint, not the last (automated early stopping).
+    <strong>Seeds</strong> — small-data fine-tunes vary ±1–2 points run-to-run from
+    initialization and shuffling alone; any claimed improvement smaller than your
+    seed-variance is noise (run 3 seeds before believing a win — M3.7's last interview
+    question, now a rule). <strong>The untouched test set</strong> — one number, at
+    the very end, after all decisions. That's the number you report.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers: a complete, annotated config</div>
+    <p>
+      The M8 capstone-A run, every field mapped:
+      <code>learning_rate=2e-5</code> (the 15%), <code>num_train_epochs=3</code>,
+      <code>per_device_train_batch_size=16</code>, <code>warmup_ratio=0.06</code>,
+      <code>weight_decay=0.01</code> (M3.5), <code>eval_strategy="epoch"</code> +
+      <code>load_best_model_at_end=True</code> (curve-watching, automated),
+      <code>bf16=True</code> (M7.3), <code>seed=42</code> (honesty).
+      Expected trajectory on 2k sentiment examples with DistilBERT: epoch 1 val-loss
+      0.38 → epoch 2 <strong>0.31</strong> → epoch 3 0.34 (curve turning!) —
+      best-checkpoint logic quietly ships epoch 2. Accuracy ≈ 0.90 vs M3.7's 0.77
+      baseline: the fine-tuning dividend, measured.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      This page is the last translation layer: every HF tutorial you've ever
+      copy-pasted is now readable as decisions, not incantations. It's also next
+      module's toolkit — M9.5's MiniLM fine-tune on your RAG pairs uses exactly this
+      recipe (with a contrastive loss swapped in), including the same curve-reading
+      and the same seed-honesty. And ④'s ln(C) check: keep it as a reflex. Half of
+      "the model won't learn" tickets in any team are data plumbing wearing a
+      modeling costume.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build (capstone A): fine-tune, break, and heal</div>
+<pre><code>from datasets import load_dataset
+from transformers import (AutoTokenizer, AutoModelForSequenceClassification,
+                          TrainingArguments, Trainer)
+import numpy as np
+
+ds = load_dataset("rotten_tomatoes")
+small = ds["train"].shuffle(seed=42).select(range(2000))     # realistic scarcity
+tok = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+def tokenize(b): return tok(b["text"], truncation=True, padding="max_length", max_length=128)
+train = small.map(tokenize, batched=True)
+val   = ds["validation"].map(tokenize, batched=True)
+
+model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+
+args = TrainingArguments("ft-demo", learning_rate=2e-5, num_train_epochs=6,  # 6 on purpose!
+    per_device_train_batch_size=16, eval_strategy="epoch", save_strategy="epoch",
+    load_best_model_at_end=True, warmup_ratio=0.06, weight_decay=0.01,
+    logging_steps=25, report_to=[])
+
+def acc(p): return {"acc": (np.argmax(p.predictions, -1) == p.label_ids).mean()}
+Trainer(model=model, args=args, train_dataset=train, eval_dataset=val,
+        compute_metrics=acc).train()
+# watch eval_loss per epoch: fall, bottom out (~epoch 2-3), then RISE — pathology ②,
+# induced deliberately. load_best_model_at_end rescues the right checkpoint anyway.
+</code></pre>
+    <p>
+      Then run the two sabotage experiments: <code>learning_rate=5e-4</code>
+      (pathology ③ live) and
+      <code>train = train.map(lambda x: {"label": np.random.randint(2)})</code>
+      (shuffled labels → loss pinned at ln 2 ≈ 0.693: pathology ④). Having
+      <em>caused</em> all three failure shapes once, you'll diagnose them on sight
+      forever — that's the point of the exercise.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    <strong>Data 80 / hyperparameters 15 / everything else 5.</strong> Start from
+    standard defaults (2e-5, 2–4 epochs, warmup), read the curves — healthy, overfit,
+    LR-spike, or flat-at-ln(C) — and let best-checkpoint selection plus seed-honesty
+    protect you from your own optimism. The recipe is boring on purpose; boring
+    recipes reproduce.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>You have 3k labeled examples and a week. Walk through your fine-tuning plan.</summary>
+      <div><p>Day 1: data audit — label consistency (double-label a sample, measure agreement), dedup, coverage check, carve val/test with proper (possibly temporal) splits. Day 2: baselines — majority class, TF-IDF+LR, frozen-encoder+head (M3.7's ladder) to know what fine-tuning must beat. Day 3: standard recipe (2e-5, 3 epochs, warmup, best-checkpoint) on DistilBERT/DeBERTa-class; read curves. Day 4: one LR sweep if underfit, data fixes if overfit; 3 seeds on the winner. Day 5: sealed test set once; error analysis on mistakes → next data iteration. The plan's shape (data > baselines > tuning) is what's being graded.</p></div>
+    </details>
+    <details>
+      <summary>Training loss sits at exactly 0.693 for a binary task and won't move. Diagnose.</summary>
+      <div><p>0.693 = ln 2 — the model outputs a uniform coin: zero learning (M3.2's sanity check). Since even broken hyperparameters usually learn SOMETHING, suspect data plumbing: labels shuffled or misaligned with inputs, reading the wrong column, all-one-class batches from unshuffled sorted data, tokenizer/model mismatch producing garbage inputs, or the head's output dim wrong. Debug: overfit 10 examples on purpose — if the model can't even memorize 10, the pipeline (not the recipe) is broken.</p></div>
+    </details>
+    <details>
+      <summary>Why "load best checkpoint" instead of training less in the first place?</summary>
+      <div><p>Because the optimal stopping point isn't knowable in advance — it depends on data size/quality and moves run to run. Training slightly past the optimum and restoring the best-validation checkpoint gets early stopping's benefit without gambling on a guess; the extra epochs cost only compute. It also gives you the diagnostic curve (you SEE the turn, confirming you found the optimum rather than undershooting it).</p></div>
+    </details>
+    <details>
+      <summary>How do you decide an improvement is real and not noise?</summary>
+      <div><p>Compare against run-to-run variance: repeat both configurations across ≥3 seeds; if the mean gap is within the seed spread (±1–2 points is typical for small-data fine-tunes), it's not evidence. Keep the test set out of ALL decisions (val-set improvements decay under experimenter overfitting — M3.3). For decisions that matter, bootstrap confidence intervals on the test predictions. The uncomfortable corollary interviewers like: most small "wins" in ML velocity culture are seed noise, and the discipline to say so is the skill.</p></div>
+    </details>
+    <details>
+      <summary>Your val metrics are great; production performance is bad. List the usual suspects.</summary>
+      <div><p>(1) Distribution shift: production inputs differ from training data (time drift, new user segments, different lengths/formats) — check coverage. (2) Leakage inflated offline numbers: near-duplicates across splits, preprocessing fit on all data (M3.3's list). (3) Label definition drift: offline labels don't match what users actually consider correct. (4) Serving skew: different tokenization/truncation/preprocessing in production code vs training code (shockingly common). (5) Feedback effects: the model's own outputs change incoming data. Fix order: reproduce production examples offline first — it localizes which suspect it is.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

@@ -82,7 +82,6 @@ window.SITE_MANIFEST = {
       slug: "06-model-families",
       num: "M6",
       title: "Model Families & Pretraining",
-      coming: true,
       pages: [
         { slug: "pretraining-the-big-idea", title: "Pretraining: The Big Idea" },
         { slug: "bert-and-masked-lm", title: "BERT & Masked Language Modeling" },
@@ -95,7 +94,6 @@ window.SITE_MANIFEST = {
       slug: "07-compute-and-scale",
       num: "M7",
       title: "Compute, Hardware & Scale",
-      coming: true,
       pages: [
         { slug: "tensors-gpus-and-batching", title: "Tensors, GPUs & Batching" },
         { slug: "model-memory-math", title: "Model Memory Math" },
@@ -108,7 +106,6 @@ window.SITE_MANIFEST = {
       slug: "08-fine-tuning",
       num: "M8",
       title: "Fine-tuning & Adaptation in Depth",
-      coming: true,
       pages: [
         { slug: "transfer-learning-and-heads", title: "Transfer Learning & Heads" },
         { slug: "the-finetune-recipe", title: "The Fine-tune Recipe" },

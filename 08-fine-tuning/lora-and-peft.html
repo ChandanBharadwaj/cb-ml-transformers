@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoRA, QLoRA &amp; PEFT — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="08-fine-tuning/lora-and-peft">
+<main id="content">
+
+  <h1>LoRA, QLoRA &amp; PEFT</h1>
+
+  <p>
+    M7.2 left a cliffhanger: fine-tuning a 7B costs ~100 GB while running it costs 14.
+    This page is the resolution — the single cleverest idea in applied ML of the
+    2020s. <strong>LoRA</strong> lets you adapt a multi-billion-parameter model by
+    training ~0.1% of its size, and <strong>QLoRA</strong> puts that on a free Colab.
+    Everything here is M1.3 matrix arithmetic; the depth is in understanding
+    <em>why so little suffices</em>.
+  </p>
+
+  <h2>The insight: weight CHANGES are simple</h2>
+
+  <p>
+    Full fine-tuning learns ΔW — the difference between adapted and original weights —
+    for every matrix. LoRA's hypothesis, verified empirically: <strong>ΔW is low-rank</strong>
+    — the change, unlike the knowledge, is simple. Intuition: fine-tuning doesn't
+    rebuild language competence; it <em>steers</em> existing machinery — "attend more
+    to legal terminology," "adopt this response format." Steering adjustments touch a
+    few directions in the representation space, not all 4096. A matrix that only acts
+    in r directions can be written as the product of two thin matrices — and thin
+    matrices are cheap to train.
+  </p>
+
+  <div class="formula">
+    <div class="math">W_effective = W_frozen + (α/r) · B·A &nbsp;&nbsp; A: r×d, B: d×r, r ≪ d</div>
+    <div class="plain">
+      <b>In plain words:</b> keep the giant pretrained W untouched; bolt a thin bypass
+      beside it — compress the input to r dims (A), expand back (B) — and add its
+      output to W's. Only A and B train. For d=4096, r=16: the bypass is 131k
+      parameters beside W's 16.8M — <b>0.8%</b> — and the residual-style "+"
+      (M5.5's trick, again!) means the base behavior is preserved by default.
+    </div>
+  </div>
+
+  <figure class="anim" id="fig-lora">
+    <div class="fig-title">Animation · The frozen giant and the trainable bypass</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-lr8-t">
+      <title id="fig-lr8-t">LoRA bypass beside a frozen weight matrix, memory collapsing</title>
+      <!-- frozen W -->
+      <g id="bigW">
+        <rect x="200" y="80" width="240" height="180" rx="14" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+        <text x="320" y="160" text-anchor="middle" font-size="20" fill="#1d4ed8" font-weight="700">W (frozen ❄)</text>
+        <text x="320" y="190" text-anchor="middle" font-size="17" fill="#1d4ed8">4096 × 4096 = 16.8M params</text>
+        <text x="185" y="150" text-anchor="middle" font-size="17" fill="#64748b">x →</text>
+        <text x="545" y="150" text-anchor="middle" font-size="17" fill="#64748b">→ out</text>
+      </g>
+      <!-- bypass -->
+      <g id="bypass" class="sp-hide">
+        <path d="M 165 185 C 180 300, 240 330, 300 330" fill="none" stroke="#059669" stroke-width="3"/>
+        <rect x="240" y="300" width="70" height="56" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+        <text x="275" y="325" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">A 🔥</text>
+        <text x="275" y="346" text-anchor="middle" font-size="17" fill="#047857">4096→16</text>
+        <rect x="330" y="300" width="70" height="56" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+        <text x="365" y="325" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">B 🔥</text>
+        <text x="365" y="346" text-anchor="middle" font-size="17" fill="#047857">16→4096</text>
+        <path d="M 404 328 C 470 328, 490 240, 490 195" fill="none" stroke="#059669" stroke-width="3" marker-end="url(#lo-g)"/>
+        <circle cx="490" cy="178" r="15" fill="#059669"/>
+        <text x="490" y="185" text-anchor="middle" font-size="18" fill="#fff" font-weight="700">+</text>
+      </g>
+      <g id="counts" class="sp-hide">
+        <rect x="30" y="30" width="580" height="36" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="320" y="54" text-anchor="middle" font-size="17" fill="#92400e" font-weight="700">trainable: A+B = 131k of 16.8M per matrix (0.8%)</text>
+      </g>
+      <g id="mem-collapse" class="sp-hide">
+        <text x="40" y="110" font-size="17" fill="#b91c1c" font-weight="700">the M7.2 bill:</text>
+        <text x="40" y="136" font-size="17" fill="#64748b">full FT ~100 GB</text>
+        <text x="40" y="162" font-size="17" fill="#047857" font-weight="700">LoRA ~18 GB</text>
+        <text x="40" y="188" font-size="17" fill="#047857" font-weight="700">QLoRA ~7 GB</text>
+      </g>
+      <defs>
+        <marker id="lo-g" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#059669"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-lr8-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-lora svg",
+        caption: "#fig-lr8-cap",
+        steps: [
+          { caption: "One attention matrix in an 8B model: 16.8M parameters. Frozen solid — no gradients, no optimizer state, no risk of forgetting what it knows." },
+          { caption: "The bypass: compress the input to rank r=16 (matrix A), expand back (B), ADD to W's output — a residual correction (M5.5's + strikes again). Only these thin matrices train. B starts at zero, so day one, the model is EXACTLY its old self.", show: ["#bypass"], holdMs: 6600 },
+          { caption: "The count: 131k trainable beside 16.8M frozen. Across a whole 8B model with r=16 on attention matrices: ~20–40M trainable — half a MiniLM, steering a giant.", show: ["#counts"] },
+          { caption: "And M7.2's bill collapses: gradients + Adam states exist only for the 0.3% — full FT's ~100 GB becomes ~18 GB. QLoRA (next section) squeezes further. The economics of adaptation, rewritten by two thin matrices.", show: ["#mem-collapse"], holdMs: 6400 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The knobs, and QLoRA's final squeeze</h2>
+
+  <p>
+    <strong>r (rank)</strong>: the bypass's width — 8–64 typical; higher = more
+    expressive change, more params; returns diminish fast (r=16 is the workhorse).
+    <strong>alpha</strong>: scales the bypass's contribution (α/r multiplier;
+    convention: α = 2r). <strong>target_modules</strong>: which matrices get
+    bypasses — minimal recipes hit attention's W_Q/W_V; modern default is all linear
+    layers including FFN (remember M5.5: that's where ⅔ of capacity lives).
+    <strong>Deployment bonus</strong>: after training, either merge (W + BA — zero
+    inference overhead, indistinguishable from full FT) or keep adapters separate —
+    one frozen base serving <em>many</em> tasks by hot-swapping ~50 MB adapter files
+    (multi-tenant fine-tuning, an actual product architecture).
+    (The adapter zoo beyond LoRA — prefix tuning, IA³, prompt tuning — solves the
+    same problem with different attachment points; LoRA won on simplicity and the
+    merge trick.)
+  </p>
+  <p>
+    <strong>QLoRA</strong> stacks one more idea: since the base is frozen anyway, store
+    it <strong>quantized to 4-bit</strong> (NF4 format — M11.3 does quantization
+    justice) and keep only the LoRA math in 16-bit. 8B base: 16 GB → ~4.5 GB; total
+    training footprint ~7 GB — <em>a 24 GB card fine-tunes 8B with room to spare;
+    a free Colab T4 handles it</em>. The quality cost is measurably small (the QLoRA
+    paper matched 16-bit fine-tuning on benchmarks). This single stack — 4-bit frozen
+    base + LoRA — is how virtually all hobbyist and most startup fine-tuning happens.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Llama-3-8B with r=16 LoRA on all linear layers: ~<strong>42M trainable</strong>
+      (0.52%), adapter file ~<strong>84 MB</strong> (vs 16 GB for a full checkpoint).
+      Memory: full FT ≈ 100+ GB · LoRA ≈ 18 GB · QLoRA ≈ <strong>6–8 GB</strong>.
+      Quality, typical instruction-tuning evals: LoRA within <strong>~1–2%</strong> of
+      full FT; QLoRA within ~1% of LoRA. Serving: 100 customer-specific adapters on
+      ONE base model = 16 GB + 100×84 MB ≈ 24 GB total, vs 1.6 TB for 100 full
+      copies — the multi-tenant math that makes per-customer fine-tuning a viable
+      business.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Course threads converging: the bypass is a <strong>residual connection</strong>
+      (M5.5) at the weight level; freezing is M8.1's dial at its finest setting;
+      B=0 initialization is the identity-default principle (M1.3 → M5.5) yet again;
+      and the memory win is precisely which bars of M7.2's bill vanish. When you see
+      "PEFT" in a library name (HF's <code>peft</code>), "adapters" on a model hub,
+      or fine-tuning-as-a-service pricing that seems impossibly cheap — it's all this
+      page. The M9.5 capstone won't need it (MiniLM is tiny), but the moment you
+      touch an LLM's weights, this is how.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build (capstone B): QLoRA-tune a small LLM on your own format</div>
+<pre><code># pip install transformers peft trl bitsandbytes datasets
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from peft import LoraConfig, get_peft_model
+from trl import SFTConfig, SFTTrainer
+from datasets import Dataset
+
+name = "Qwen/Qwen2.5-0.5B-Instruct"
+bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                         bnb_4bit_compute_dtype=torch.bfloat16)   # the Q in QLoRA
+model = AutoModelForCausalLM.from_pretrained(name, quantization_config=bnb)
+tok = AutoTokenizer.from_pretrained(name)
+
+lora = LoraConfig(r=16, lora_alpha=32, target_modules="all-linear",
+                  lora_dropout=0.05, task_type="CAUSAL_LM")
+model = get_peft_model(model, lora)
+model.print_trainable_parameters()      # ~0.5% — the whole page in one line
+
+# 100 examples of YOUR format — e.g., support tickets → structured triage JSON
+rows = [{"messages": [
+    {"role": "user", "content": f"Ticket: my invoice #{1000+i} is wrong"},
+    {"role": "assistant", "content": '{"category":"billing","urgency":"medium"}'}
+]} for i in range(100)]
+
+SFTTrainer(model=model, args=SFTConfig("qlora-demo", num_train_epochs=3,
+           per_device_train_batch_size=2, gradient_accumulation_steps=8,
+           learning_rate=1e-4, logging_steps=10, report_to=[]),
+           train_dataset=Dataset.from_list(rows),
+           processing_class=tok).train()
+
+model.save_pretrained("my-adapter")      # ~10 MB file = your entire fine-tune
+</code></pre>
+    <p>
+      Compare generations before/after on your format — 100 examples visibly locks in
+      the JSON structure (SFT teaching format, M8.3's lesson, via LoRA's mechanism).
+      Then look at <code>my-adapter/</code>: a few megabytes that steer half a billion
+      parameters. Swap in real tickets from your world and this demo is a shippable
+      pattern.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    LoRA: freeze W, train a thin low-rank bypass B·A added residual-style — because
+    fine-tuning's <em>changes</em> are simple even when the model isn't. ~0.5%
+    trainable, ~1% quality cost, adapters merge to zero overhead or hot-swap for
+    multi-tenancy. QLoRA: 4-bit frozen base under the same trick → 8B fine-tuning on
+    a free GPU. The pretrain/adapt economy's last-mile technology — and it's all
+    matrices you already understand.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Explain LoRA from first principles — why does low rank suffice?</summary>
+      <div><p>LoRA freezes pretrained W and learns an additive update ΔW = (α/r)BA with A (r×d) down-projecting and B (d×r) up-projecting, r ≪ d; only A,B train. It suffices because fine-tuning's weight CHANGES are empirically low-rank: adaptation steers existing features (formats, domain emphasis, style) rather than building new competence, so the update acts in few directions of representation space. Aghajanyan et al.'s intrinsic-dimension work and LoRA's own ablations back this: task adaptation lives in a tiny subspace of parameter space.</p></div>
+    </details>
+    <details>
+      <summary>Where do LoRA's memory savings actually come from? Be precise against the training-memory bill.</summary>
+      <div><p>From the trainable-parameter-proportional terms (M7.2): gradients, Adam's two moments, and fp32 masters exist only for A,B (~0.5% of params) — collapsing ~70 GB of an 8B's training state to under 1 GB. NOT from weights (base still loaded — 16 GB fp16, unless quantized: QLoRA's 4-bit → ~4.5 GB) and NOT much from activations (forward pass unchanged — still batch/seq-dependent; checkpointing still applies). Full FT ~100 GB → LoRA ~18 → QLoRA ~7: each step names which bill-line it deleted.</p></div>
+    </details>
+    <details>
+      <summary>Why is B initialized to zero, and what does merging adapters mean?</summary>
+      <div><p>B=0 makes BA=0 at start: the adapted model is exactly the base on day one — training departs smoothly from known-good behavior instead of from noise (the identity-default principle behind residuals). Merging: after training, compute W' = W + (α/r)BA once and save W' — inference then has literally zero LoRA overhead (no extra matmuls), indistinguishable from a full fine-tune. Alternative: keep adapters unmerged and hot-swap per request — the multi-tenant serving pattern (one base, N ~50 MB adapters).</p></div>
+    </details>
+    <details>
+      <summary>How do you choose r, alpha, and target modules in practice?</summary>
+      <div><p>Start r=16, α=32 (the α=2r convention), target all-linear (attention + FFN — FFN holds ⅔ of capacity, M5.5; QLoRA's paper found all-linear matters more than large r). Raise r (32–64) for aggressive behavior change or larger datasets; drop to 8 for tiny data or style-only tweaks. Diminishing returns above r=64 are well-documented. Then treat it like M8.2: LR ~1e-4 (adapters tolerate higher than full FT), watch curves, 3 seeds before believing differences — LoRA changes the parameterization, not the discipline.</p></div>
+    </details>
+    <details>
+      <summary>When is full fine-tuning still worth it over LoRA?</summary>
+      <div><p>When the required change is large and deep: continued pretraining on a new domain/language (millions of documents — the update ISN'T low-rank), major capability additions, small models where full FT is cheap anyway (MiniLM-class — M9.5 just fine-tunes everything), or squeezing the last 1–2% on a high-value task with ample compute. Also when serving infrastructure prefers a single merged artifact anyway — though merged LoRA gives that too. Default in 2025 practice: LoRA/QLoRA first; escalate only with evidence the low-rank ceiling is binding (train loss floors early despite data/LR sweeps).</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

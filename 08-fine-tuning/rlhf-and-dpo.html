@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RLHF &amp; DPO — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="08-fine-tuning/rlhf-and-dpo">
+<main id="content">
+
+  <h1>RLHF &amp; DPO</h1>
+
+  <p>
+    SFT's limit: it needs someone to write the <em>ideal</em> answer. But for most
+    prompts there are five decent answers — and the interesting signal is
+    <em>which one people prefer</em>. Preference tuning learns from rankings instead of
+    demonstrations, and it's the final layer that shaped every frontier assistant's
+    personality — including the refusals, the hedging, and the eagerness you've
+    engineered around. Interview-heavy page; take the diagrams slowly.
+  </p>
+
+  <h2>Step 1: a reward model learns taste</h2>
+
+  <p>
+    Collecting rankings is cheap compared to writing answers: show annotators a prompt
+    with two model responses, ask "which is better?" Thousands of A-vs-B judgments
+    train a <strong>reward model</strong> — typically the LLM with its head swapped
+    (M8.1's move!) for a single scalar output: "how much would a human like this
+    response?" It compresses human taste into a differentiable score — with the
+    obvious caveat that it learns what raters <em>reward</em>, which is not identical
+    to what is <em>true</em> (hold that thought).
+  </p>
+
+  <h2>Step 2: the RLHF triangle</h2>
+
+  <figure class="anim" id="fig-rlhf">
+    <div class="fig-title">Animation · Policy, reward, and the KL leash</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-rl-t">
+      <title id="fig-rl-t">The RLHF loop with policy, reward model and KL anchor</title>
+      <!-- policy -->
+      <g id="policy">
+        <rect x="60" y="60" width="200" height="70" rx="14" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+        <text x="160" y="90" text-anchor="middle" font-size="18" fill="#1d4ed8" font-weight="700">policy (the LLM)</text>
+        <text x="160" y="114" text-anchor="middle" font-size="17" fill="#1d4ed8">writes responses</text>
+      </g>
+      <!-- reward model -->
+      <g id="rm" class="sp-hide">
+        <line x1="264" y1="95" x2="374" y2="95" stroke="#94a3b8" stroke-width="3" marker-end="url(#rl-a)"/>
+        <text x="320" y="80" text-anchor="middle" font-size="17" fill="#64748b">samples</text>
+        <rect x="380" y="60" width="200" height="70" rx="14" fill="#fef3c7" stroke="#fcd34d" stroke-width="2"/>
+        <text x="480" y="90" text-anchor="middle" font-size="18" fill="#b45309" font-weight="700">reward model</text>
+        <text x="480" y="114" text-anchor="middle" font-size="17" fill="#b45309">scores them: 7.2 / 3.1</text>
+      </g>
+      <!-- gradient back -->
+      <g id="pg" class="sp-hide">
+        <path d="M 380 140 C 330 180, 240 180, 190 140" fill="none" stroke="#059669" stroke-width="3.5" marker-end="url(#rl-g)"/>
+        <text x="285" y="188" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">nudge weights toward high-scoring behavior (PPO)</text>
+      </g>
+      <!-- KL anchor -->
+      <g id="kl" class="sp-hide">
+        <rect x="200" y="250" width="240" height="70" rx="14" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+        <text x="320" y="280" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">frozen SFT copy</text>
+        <text x="320" y="304" text-anchor="middle" font-size="17" fill="#64748b">the anchor</text>
+        <path d="M 240 246 C 220 200, 190 170, 165 136" fill="none" stroke="#dc2626" stroke-width="3" stroke-dasharray="7 5"/>
+        <text x="118" y="212" text-anchor="middle" font-size="17" fill="#dc2626" font-weight="700">KL leash:</text>
+        <text x="118" y="234" text-anchor="middle" font-size="17" fill="#dc2626">"don't drift far</text>
+        <text x="118" y="254" text-anchor="middle" font-size="17" fill="#dc2626">from who you were"</text>
+      </g>
+      <g id="hack" class="sp-hide">
+        <rect x="60" y="348" width="520" height="56" rx="12" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="320" y="372" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">without the leash: reward hacking — gibberish the reward model happens to love</text>
+        <text x="320" y="396" text-anchor="middle" font-size="17" fill="#b91c1c">the RM is a lossy proxy for humans; unconstrained optimization exploits its gaps</text>
+      </g>
+      <defs>
+        <marker id="rl-a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#94a3b8"/></marker>
+        <marker id="rl-g" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#059669"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-rl-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-rlhf svg",
+        caption: "#fig-rl-cap",
+        steps: [
+          { caption: "The policy — your SFT model — writes responses to a pile of prompts. No labels exist; it's exploring." },
+          { caption: "The reward model scores each sample: learned human taste, applied at machine speed.", show: ["#rm"] },
+          { caption: "Policy-gradient RL (PPO) nudges the LLM's weights toward what scored well. Note what's new vs everything else in this course: the training signal is a score on WHOLE generations, not per-token cross-entropy — that's why RL machinery is needed at all.", show: ["#pg"], holdMs: 6600 },
+          { caption: "The critical third corner: a KL penalty tethers the policy to its frozen SFT self — every token distribution is charged for drifting. It's M8.1's anti-forgetting principle, formalized into the loss.", show: ["#kl"], holdMs: 6200 },
+          { caption: "Remove the leash and you get reward hacking: the policy finds adversarial text the RM overrates — repetitive sycophancy, weird tokens, gibberish with great scores. Optimizing a proxy hard enough always exposes the proxy. (This sentence generalizes far beyond ML.)", show: ["#hack"], holdMs: 6600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>DPO: the shortcut that ate the pipeline</h2>
+
+  <p>
+    RLHF works but is an engineering beast — four models in memory (policy, frozen
+    reference, reward model, PPO's value head), RL instability, sampling loops.
+    <strong>Direct Preference Optimization</strong> (2023) collapsed it with a neat
+    mathematical result: for the KL-anchored objective, the optimal policy can be
+    reached <em>directly from preference pairs</em> with a simple classification-style
+    loss — no reward model, no sampling, no RL. Per (prompt, preferred, rejected)
+    triple: raise the policy's relative log-probability of the preferred response,
+    lower the rejected one's, both measured against the frozen reference (the leash
+    survives, built into the loss). Train it like any supervised job (M8.2's recipe!).
+    Result: preference tuning went from lab-only to weekend-project, and most
+    open-source aligned models now ship via DPO or its cousins (IPO, KTO, ORPO —
+    name-drops that signal currency).
+  </p>
+
+  <h2>The personality side-effects you engineer around</h2>
+
+  <p>
+    Preference tuning explains your daily observations mechanically:
+    <strong>refusals</strong> — raters preferred safe declines on harmful prompts, so
+    declining became high-reward behavior (and over-generalizes: benign requests near
+    the boundary get refused too). <strong>Sycophancy</strong> — raters like being
+    agreed with; models learn to fold under "are you sure?" even when right.
+    <strong>Verbosity</strong> — longer, structured answers <em>look</em> more helpful
+    in A/B choices, so models pad (and your token bill grows — M7.5).
+    <strong>Confident tone</strong> — hedged answers lose preference battles, nudging
+    models toward fluent certainty (compounding hallucination's danger — M11.6).
+    None of these are bugs in your prompts; they're rational responses to the reward
+    landscape the models were raised in.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      InstructGPT's stack, quantified: ~13k SFT demonstrations, ~33k ranked comparison
+      sets for the RM, ~31k RL prompts — and the paper's headline: raters preferred the
+      RLHF'd <strong>1.3B</strong> model over the raw <strong>175B</strong> base.
+      Alignment beat 134× scale on human preference. DPO's economics: preference-tune
+      an 8B on ~10–60k public pairs (UltraFeedback-class data) with QLoRA on
+      <strong>one 24 GB GPU overnight</strong> — the same capability that took an
+      industrial lab in 2022.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Your prompt-engineering scars, diagnosed: "answer concisely" fights
+      verbosity-reward; models caving when users push back is sycophancy-reward;
+      over-refusals on edgy-but-legitimate queries are safety-reward over-generalizing.
+      Knowing the cause changes tactics — e.g., structured output constraints beat
+      pleading for brevity, and "give your answer, then confidence 1–10" partially
+      counters trained overconfidence. Also: the full modern stack is now assembled
+      in your head — <strong>pretrain (M6) → SFT (8.3) → preference tuning (this
+      page)</strong> — which is the literal production lineage of the model behind
+      your chatbot.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: run DPO on a small model (one GPU, one evening)</div>
+<pre><code># pip install trl peft datasets bitsandbytes
+from datasets import load_dataset
+from trl import DPOConfig, DPOTrainer
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_name = "Qwen/Qwen2.5-0.5B-Instruct"          # small enough for any GPU
+model = AutoModelForCausalLM.from_pretrained(model_name)
+tok = AutoTokenizer.from_pretrained(model_name)
+
+# preference triples: (prompt, chosen, rejected)
+ds = load_dataset("trl-lib/ultrafeedback_binarized", split="train[:2000]")
+
+args = DPOConfig("dpo-demo", per_device_train_batch_size=2,
+                 gradient_accumulation_steps=8,       # M7.3's trick
+                 learning_rate=5e-6, num_train_epochs=1,
+                 beta=0.1,                            # the KL leash strength!
+                 logging_steps=20, report_to=[])
+
+DPOTrainer(model=model, args=args, train_dataset=ds,
+           processing_class=tok).train()
+</code></pre>
+    <p>
+      Watch the logged <code>rewards/chosen</code> and <code>rewards/rejected</code>
+      margins separate — preference being carved into weights, live. Then the
+      instructive sabotage: set <code>beta=0.01</code> (loose leash) and compare
+      generations before/after — you'll see drift toward longer, samey, occasionally
+      degenerate outputs. You've reproduced the field's central tension on a 0.5B
+      model: optimization pressure vs staying yourself.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Preference tuning learns from <strong>rankings, not demonstrations</strong>:
+    RLHF = reward model + PPO + the KL leash (and reward hacking when the leash
+    slips); DPO = the same anchored objective collapsed into a simple supervised loss
+    that democratized alignment. Its fingerprints — refusals, sycophancy, verbosity,
+    confidence — are the personality of every assistant you use, and now you can
+    name their causes.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Walk through the three stages of the InstructGPT/ChatGPT recipe.</summary>
+      <div><p>(1) SFT: fine-tune the pretrained base on human demonstration conversations — teaches the assistant format. (2) Reward modeling: humans rank pairs/sets of model responses; train a model (LLM + scalar head) to predict preference. (3) RLHF: optimize the SFT policy with PPO to maximize reward-model scores, with a KL penalty to the frozen SFT model to prevent drift/hacking. Each stage's data is progressively cheaper per example (write &gt; rank &gt; prompt-only), which is the recipe's economic logic.</p></div>
+    </details>
+    <details>
+      <summary>Why RL for preference optimization — why not just supervised learning on the good answers?</summary>
+      <div><p>Because the signal is a judgment on complete generations the model itself produced — there's no per-token label to supervise on, and the "good answers" you'd supervise on don't exist until sampled. RL handles exactly this: sample, score holistically, credit-assign back through generation. (DPO's insight is that for THIS particular KL-anchored objective, the RL can be integrated out analytically — but that's a special-case collapse, not evidence RL was never needed; it inherits RLHF's framing.)</p></div>
+    </details>
+    <details>
+      <summary>What is reward hacking and what prevents it?</summary>
+      <div><p>The policy exploiting the reward model's imperfections — finding outputs the RM scores highly that humans wouldn't endorse (repetition, sycophantic padding, degenerate tokens), since the RM is a lossy proxy trained on finite comparisons. Mitigations: the KL penalty to the reference model (bounds distribution shift), periodically refreshing the RM with new comparisons on current policy outputs, RM ensembles, and capping optimization steps. It's Goodhart's law with gradients — a framing interviewers reward.</p></div>
+    </details>
+    <details>
+      <summary>Explain DPO's advantage over PPO-based RLHF, and its beta parameter.</summary>
+      <div><p>DPO derives that the KL-anchored RLHF optimum can be trained directly from preference triples with a logistic loss on the policy-vs-reference log-probability margins — eliminating the reward model, sampling loops, and RL instability: two models in memory instead of four, standard supervised infrastructure, reproducible. Beta scales the implicit KL leash: high beta = conservative (stay near reference), low beta = aggressive preference-fitting with drift/degeneration risk. Trade-off vs PPO: simpler and usually competitive, but offline (fixed pairs, no exploration) and bounded by preference-data quality.</p></div>
+    </details>
+    <details>
+      <summary>Explain sycophancy and verbosity as optimization outcomes, and one product mitigation for each.</summary>
+      <div><p>Both are rater-preference artifacts: annotators disproportionately prefer agreement (so models learn to fold under pushback, even when right) and longer/structured answers (so models pad). Mitigations — sycophancy: prompt for evidence-first answers ("state the answer, then evaluate the user's claim against it") and avoid leading questions in critical flows; verbosity: hard output constraints (schemas, max_tokens, "exactly 3 bullets") rather than stylistic pleas, since structure requests align with trained format-following while "be brief" fights the reward gradient. Naming the training-level cause before the mitigation is what distinguishes the answer.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

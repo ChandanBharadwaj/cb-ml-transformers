@@ -19,10 +19,14 @@
   <h2>B</h2>
   <p><strong>BPE (Byte-Pair Encoding)</strong> — build a vocabulary by repeatedly merging the most frequent adjacent pair; frequent words stay whole, everything else spells out of pieces. → <a href="05-transformer/tokenization-bpe-wordpiece.html">Tokenization</a></p>
   <p><strong>Bias</strong> — the learned vector added after a layer's matrix multiply (the +b in Wx + b); lets the layer shift space, not just warp it. → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
+  <p><strong>Base vs instruct checkpoint</strong> — raw pretrained text-continuer vs the same weights SFT'd (+preference-tuned) into an assistant; confusing them is the classic model-hub mistake. → <a href="08-fine-tuning/instruction-tuning-sft.html">Instruction Tuning (SFT)</a></p>
   <p><strong>Backpropagation</strong> — blame flowing backward through the network, multiplying by each stage's local slope (chain rule), yielding every parameter's gradient in one sweep. → <a href="03-neural-nets/backprop-intuition.html">Backpropagation, Intuitively</a></p>
   <p><strong>Batch / mini-batch</strong> — the handful of examples processed per training step; its size trades gradient smoothness against memory. → <a href="03-neural-nets/gradient-descent-training-loop.html">The Training Loop</a></p>
 
   <h2>C</h2>
+  <p><strong>Catastrophic forgetting</strong> — aggressive fine-tuning overwriting pretrained competence; the reason recipes whisper "small LR, few epochs, move less". → <a href="08-fine-tuning/transfer-learning-and-heads.html">Transfer Learning &amp; Heads</a></p>
+  <p><strong>Chinchilla ratio</strong> — compute-optimal training wants ~20 tokens per parameter; modern models deliberately overtrain far past it for cheaper serving. → <a href="07-compute-and-scale/scaling-laws-and-chinchilla.html">Scaling Laws &amp; Chinchilla</a></p>
+  <p><strong>Chat template</strong> — the serialization format (special tokens, role headers) that turns your messages array into the token stream the model was actually trained on. → <a href="08-fine-tuning/instruction-tuning-sft.html">Instruction Tuning (SFT)</a></p>
   <p><strong>Causal mask</strong> — the −∞ staircase in attention scores that blocks looking at future tokens; the one difference between BERT's body and GPT's. → <a href="05-transformer/decoder-masking-and-generation.html">Decoder, Masking &amp; Generation</a></p>
   <p><strong>Cross-attention</strong> — attention where queries come from the decoder and keys/values from the encoder's output; how translation models and Whisper consult their input. → <a href="05-transformer/encoder-vs-decoder-vs-both.html">Encoder vs Decoder vs Both</a></p>
   <p><strong>Contrastive learning</strong> — training by pulling positive pairs together and pushing negatives apart in embedding space; powers word2vec, sentence-transformers, CLIP, and RAG retrievers. → <a href="02-embeddings/negative-sampling.html">Negative Sampling</a></p>
@@ -30,6 +34,7 @@
   <p><strong>Cosine similarity</strong> — the dot product of two vectors after removing their lengths; measures direction agreement, from −1 to 1. The score behind every vector search. → <a href="01-math/dot-product-similarity.html">Dot Product = Similarity</a></p>
 
   <h2>D</h2>
+  <p><strong>DPO (Direct Preference Optimization)</strong> — preference tuning collapsed into a simple supervised loss: raise the preferred response's probability vs a frozen reference, no reward model or RL. → <a href="08-fine-tuning/rlhf-and-dpo.html">RLHF &amp; DPO</a></p>
   <p><strong>Distributional hypothesis</strong> — "you shall know a word by the company it keeps": words in similar contexts have similar meanings; the license for learning meaning from raw text. → <a href="02-embeddings/one-hot-and-why-it-fails.html">One-Hot &amp; Why It Fails</a></p>
   <p><strong>Dropout</strong> — randomly zeroing activations during training so features can't co-adapt; off at inference. → <a href="03-neural-nets/optimizers-and-regularization.html">Optimizers &amp; Regularization</a></p>
   <p><strong>Dimension</strong> — one slot in a vector. all-MiniLM's embeddings have 384 of them. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>
@@ -41,6 +46,7 @@
   <p><strong>Embedding</strong> — a learned vector that represents meaning, placed so that similar things are near each other. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>
 
   <h2>G</h2>
+  <p><strong>Gradient accumulation / checkpointing</strong> — big-batch math on small VRAM (sum micro-batch gradients) / trade ~30% compute for activation memory (recompute in backward). → <a href="07-compute-and-scale/training-at-scale.html">Training at Scale</a></p>
   <p><strong>Gradient (mini-batch / SGD)</strong> — real training estimates the slope on a small random batch instead of the whole dataset: noisier, vastly cheaper, and the noise even helps. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
   <p><strong>Gradient</strong> — the slope of the loss in every direction at once; points uphill, so training steps the other way. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
   <p><strong>Gradient descent</strong> — repeat: measure the slope, step downhill. The algorithm behind all model training. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
@@ -48,11 +54,15 @@
   <h2>F</h2>
   <p><strong>FFN (feed-forward network)</strong> — the per-token expand→GELU→compress block after attention; holds ~⅔ of a transformer's parameters and most of its stored facts. → <a href="05-transformer/residuals-layernorm-ffn.html">Residuals, LayerNorm &amp; FFN</a></p>
 
+  <h2>I</h2>
+  <p><strong>In-context learning</strong> — examples in the prompt inducing task behavior with zero weight updates; emerged with GPT-3 scale, powers few-shot prompting and RAG. → <a href="06-model-families/gpt-and-causal-lm.html">GPT &amp; Causal LM</a></p>
+
   <h2>K</h2>
   <p><strong>KV / Q (query, key, value)</strong> — a token's three learned roles: what I seek, what I advertise, what I hand over. Attention = softmax(QKᵀ/√d)·V. → <a href="05-transformer/self-attention-qkv.html">Self-Attention: Q, K, V</a></p>
 
   <h2>L</h2>
   <p><strong>LayerNorm</strong> — re-center and re-scale each token's vector (then learned γ, β); the thermostat keeping hundreds of residual additions numerically sane. → <a href="05-transformer/residuals-layernorm-ffn.html">Residuals, LayerNorm &amp; FFN</a></p>
+  <p><strong>LoRA / QLoRA</strong> — freeze W, train a thin low-rank bypass B·A added residual-style (~0.5% of params); QLoRA holds the frozen base in 4-bit — 8B fine-tuning on a free GPU. → <a href="08-fine-tuning/lora-and-peft.html">LoRA, QLoRA &amp; PEFT</a></p>
   <p><strong>Language model</strong> — a machine assigning probabilities to the next token given a prefix; every LLM capability is this task in a loop. → <a href="04-sequences-attention/language-modeling.html">Language Modeling &amp; Perplexity</a></p>
   <p><strong>Leakage</strong> — test information contaminating training (shared preprocessing stats, duplicates across splits, temporal mixing); the silent killer of honest metrics. → <a href="03-neural-nets/gradient-descent-training-loop.html">The Training Loop</a></p>
   <p><strong>Logit</strong> — a raw pre-softmax score (w·x + b); one per class or vocabulary token at a model's output. → <a href="03-neural-nets/the-neuron.html">The Neuron</a></p>
@@ -60,6 +70,8 @@
   <p><strong>Loss</strong> — a single number scoring how wrong the model currently is; training exists to push it down. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
 
   <h2>M</h2>
+  <p><strong>MLM (masked language modeling)</strong> — hide 15% of tokens (with the 80/10/10 twist), predict from both sides; BERT-family pretraining, ancestor of MiniLM and GLiNER. → <a href="06-model-families/bert-and-masked-lm.html">BERT &amp; Masked LM</a></p>
+  <p><strong>Mixed precision</strong> — compute in bf16 for speed, keep fp32 master weights for stable updates; why training memory includes two copies of the model. → <a href="07-compute-and-scale/training-at-scale.html">Training at Scale</a></p>
   <p><strong>Multi-head attention</strong> — h parallel attentions in d/h-dim learned subspaces, concatenated and mixed by W_O; several glance patterns for the price of one. → <a href="05-transformer/multi-head-attention.html">Multi-Head Attention</a></p>
   <p><strong>Matrix</strong> — a grid of numbers that transforms vectors; every "layer" of a neural network is one (plus a bend). → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
 
@@ -74,15 +86,21 @@
 
   <h2>P</h2>
   <p><strong>Perplexity</strong> — e^loss: the number of tokens a language model effectively hesitates between per step. Lower = better. → <a href="04-sequences-attention/language-modeling.html">Language Modeling &amp; Perplexity</a></p>
+  <p><strong>Prefill vs decode</strong> — prompt processed in one parallel compute-bound pass, then output generated token-by-token bandwidth-bound; why output tokens cost 3–5× input. → <a href="07-compute-and-scale/inference-economics.html">Inference Economics</a></p>
+  <p><strong>Pretraining</strong> — self-supervised prediction over a curated internet-scale corpus, paid once at $10M+ scale, producing the base everyone adapts. → <a href="06-model-families/pretraining-the-big-idea.html">Pretraining: The Big Idea</a></p>
   <p><strong>Positional encoding</strong> — the order-stamp added to (or rotated into) token vectors, since attention itself is order-blind: sinusoids, learned rows (the 512 limit), or RoPE. → <a href="05-transformer/embeddings-and-positional-encoding.html">Embeddings &amp; Positional Encoding</a></p>
   <p><strong>Precision / recall / F1</strong> — "when I flag, am I right?" / "do I find them all?" / their strict harmonic mean. The measurement kit for imbalanced problems. → <a href="03-neural-nets/measuring-models.html">Measuring Models</a></p>
   <p><strong>Parameter</strong> — one learned number inside a model. "7B model" = seven billion of these. → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
 
   <h2>R</h2>
+  <p><strong>Reward hacking</strong> — a policy exploiting its reward model's blind spots (sycophancy, padding, gibberish that scores well); the KL leash exists to prevent it. → <a href="08-fine-tuning/rlhf-and-dpo.html">RLHF &amp; DPO</a></p>
+  <p><strong>RLHF</strong> — train a reward model from human rankings, then optimize the LLM against it with PPO under a KL penalty to its SFT self; the source of assistant personality. → <a href="08-fine-tuning/rlhf-and-dpo.html">RLHF &amp; DPO</a></p>
   <p><strong>Residual connection</strong> — x + layer(x): each layer adds a correction to a highway whose backward slope is exactly 1, curing vanishing gradients and making depth safe. → <a href="05-transformer/residuals-layernorm-ffn.html">Residuals, LayerNorm &amp; FFN</a></p>
   <p><strong>RoPE (rotary position embedding)</strong> — rotate Q and K by position-proportional angles so attention depends on relative token distance; the position scheme behind 128k contexts. → <a href="05-transformer/embeddings-and-positional-encoding.html">Embeddings &amp; Positional Encoding</a></p>
 
   <h2>S</h2>
+  <p><strong>Scaling laws</strong> — loss falls as a predictable power law in params/data/compute; the ruler frontier labs budget nine-figure runs with. → <a href="07-compute-and-scale/scaling-laws-and-chinchilla.html">Scaling Laws &amp; Chinchilla</a></p>
+  <p><strong>SFT (supervised fine-tuning)</strong> — training on (instruction, response) pairs with loss on the response; converts a text-continuer into an assistant. → <a href="08-fine-tuning/instruction-tuning-sft.html">Instruction Tuning (SFT)</a></p>
   <p><strong>Self-attention</strong> — a sentence attending to itself: every token queries every token, updating each vector with weighted context. The bank-problem killer. → <a href="05-transformer/self-attention-qkv.html">Self-Attention: Q, K, V</a></p>
   <p><strong>Seq2seq bottleneck</strong> — forcing a whole input through one fixed-size vector between encoder and decoder; its measured failure gave birth to attention. → <a href="04-sequences-attention/seq2seq-and-the-bottleneck.html">Seq2Seq &amp; the Bottleneck</a></p>
   <p><strong>Skip-gram</strong> — word2vec's flavor where the center word predicts its context words via two embedding matrices and a dot product. → <a href="02-embeddings/word2vec-skip-gram.html">word2vec: Skip-Gram Internals</a></p>
@@ -93,6 +111,8 @@
   <h2>T</h2>
   <p><strong>Token / tokenization</strong> — the subword units models actually read; all context limits and prices are counted in them. ~¾ of an English word each. → <a href="05-transformer/tokenization-bpe-wordpiece.html">Tokenization</a></p>
   <p><strong>Temperature</strong> — a divisor applied to logits before softmax: low = sharp/deterministic, high = flat/creative. The API parameter, demystified. → <a href="03-neural-nets/softmax-and-cross-entropy.html">Softmax &amp; Cross-Entropy</a></p>
+
+  <p><strong>Transfer learning</strong> — borrowed pretrained body + new task head + a freezing dial; why 500 labels can beat 25,000. → <a href="08-fine-tuning/transfer-learning-and-heads.html">Transfer Learning &amp; Heads</a></p>
 
   <h2>V</h2>
   <p><strong>Vanishing gradient</strong> — blame decaying to nothing through long products of small local slopes; the disease that residual connections cure. → <a href="03-neural-nets/backprop-intuition.html">Backpropagation, Intuitively</a></p>

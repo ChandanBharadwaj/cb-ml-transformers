@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fine-tune vs RAG vs Prompt — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="08-fine-tuning/finetune-vs-rag-vs-prompt">
+<main id="content">
+
+  <h1>Fine-tune vs RAG vs Prompt</h1>
+
+  <p>
+    Module capstone: the decision you'll actually face, again and again — "the model
+    isn't doing what we want; which lever do we pull?" You now understand all three
+    levers mechanically, which turns a religious debate into an engineering decision.
+    One principle sorts 90% of cases, a decision tree handles the rest, and a cost
+    table settles arguments.
+  </p>
+
+  <h2>The three levers, in one sentence each</h2>
+
+  <p>
+    <strong>Prompting</strong> changes the model's <em>context</em> — instructions,
+    examples (in-context learning, M6.3), constraints — per request, instantly
+    revertible, paid on every call. <strong>RAG</strong> changes the model's
+    <em>available knowledge</em> — retrieved documents in context at inference —
+    fresh, sourced, updateable by re-indexing. <strong>Fine-tuning</strong> changes
+    the model's <em>weights</em> — behavior and style permanently, amortized across
+    all future calls (SFT for format, DPO for taste, LoRA for affordability —
+    the last three pages).
+  </p>
+
+  <div class="keypoint callout">
+    <div class="co-head">The sorting principle</div>
+    <p>
+      <strong>Knowledge goes in the context. Behavior goes in the weights.</strong>
+      If the failure is "the model doesn't KNOW something" (your docs, current prices,
+      user data) → RAG; fine-tuning cannot reliably add facts (M8.3's scale-mismatch)
+      and stales instantly. If the failure is "the model doesn't ACT right"
+      (format, tone, domain conventions, consistency) → prompt first, fine-tune when
+      prompting plateaus. Most confusion dissolves under this one test.
+    </p>
+  </div>
+
+  <h2>The decision tree, walked</h2>
+
+  <figure class="anim" id="fig-tree8">
+    <div class="fig-title">Animation · Four real complaints, four routes</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-dt-t">
+      <title id="fig-dt-t">Decision tree routing four scenarios to prompt, RAG or fine-tuning</title>
+      <!-- root -->
+      <g id="root8">
+        <rect x="190" y="30" width="260" height="48" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+        <text x="320" y="60" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">what's actually failing?</text>
+      </g>
+      <!-- branch boxes -->
+      <g id="branches8">
+        <line x1="240" y1="82" x2="120" y2="130" stroke="#94a3b8" stroke-width="2.5"/>
+        <line x1="320" y1="82" x2="320" y2="130" stroke="#94a3b8" stroke-width="2.5"/>
+        <line x1="400" y1="82" x2="520" y2="130" stroke="#94a3b8" stroke-width="2.5"/>
+        <rect x="30" y="134" width="180" height="64" rx="12" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+        <text x="120" y="160" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">missing knowledge</text>
+        <text x="120" y="184" text-anchor="middle" font-size="17" fill="#1d4ed8">→ RAG</text>
+        <rect x="230" y="134" width="180" height="64" rx="12" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+        <text x="320" y="160" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">wrong behavior</text>
+        <text x="320" y="184" text-anchor="middle" font-size="17" fill="#047857">→ prompt, then FT</text>
+        <rect x="430" y="134" width="180" height="64" rx="12" fill="#fef3c7" stroke="#fcd34d" stroke-width="2"/>
+        <text x="520" y="160" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">not capable enough</text>
+        <text x="520" y="184" text-anchor="middle" font-size="17" fill="#b45309">→ bigger model (M6.5)</text>
+      </g>
+      <!-- scenarios -->
+      <g id="sc1" class="sp-hide">
+        <rect x="30" y="228" width="580" height="40" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="44" y="254" font-size="17" class="sv-ink">"bot doesn't know our refund policy" → <tspan fill="#1d4ed8" font-weight="700">RAG — facts, in context, always current</tspan></text>
+      </g>
+      <g id="sc2" class="sp-hide">
+        <rect x="30" y="276" width="580" height="40" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="44" y="302" font-size="17" class="sv-ink">"answers are right but the tone is off-brand" → <tspan fill="#047857" font-weight="700">prompt; FT if 10k+ calls/day</tspan></text>
+      </g>
+      <g id="sc3" class="sp-hide">
+        <rect x="30" y="324" width="580" height="40" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="44" y="350" font-size="17" class="sv-ink">"ignores our JSON schema 5% of the time" → <tspan fill="#047857" font-weight="700">constrained decoding, then SFT-LoRA</tspan></text>
+      </g>
+      <g id="sc4" class="sp-hide">
+        <rect x="30" y="372" width="580" height="40" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+        <text x="44" y="398" font-size="17" class="sv-ink">"knows the docs but reasons poorly over them" → <tspan fill="#b45309" font-weight="700">better model tier — no lever fixes capability</tspan></text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-dt-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-tree8 svg",
+        caption: "#fig-dt-cap",
+        steps: [
+          { caption: "First branch on the failure TYPE: knowledge, behavior, or raw capability. Misdiagnosing this level is where most wasted engineering-months go." },
+          { caption: "Scenario 1: missing company facts. RAG — because facts in context are fresh, sourced, and updateable by re-indexing tonight. Fine-tuning facts = stale on arrival + M8.3's scale-mismatch.", show: ["#sc1"] },
+          { caption: "Scenario 2: tone. Pure behavior → prompt does it today for free; fine-tune (SFT-LoRA on brand-voice pairs) when prompt real estate or per-call cost at volume justifies baking it in.", show: ["#sc2"] },
+          { caption: "Scenario 3: format compliance. Escalation ladder within behavior: schema-constrained decoding (M12.4) → few-shot → SFT-LoRA locks it to ~100% (M8.5's capstone did exactly this).", show: ["#sc3"] },
+          { caption: "Scenario 4: the humbling one. If the model can't REASON over what it's given, no amount of context or tuning manufactures capability — change the model tier (M6.5's decision, M7.4's economics). Knowing when your levers don't apply is also a skill.", show: ["#sc4"], holdMs: 6600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The cost table that settles meetings</h2>
+
+  <table>
+    <tr><th></th><th>Prompt</th><th>RAG</th><th>Fine-tune (LoRA)</th></tr>
+    <tr><td><strong>time to ship</strong></td><td>minutes</td><td>days</td><td>days–weeks (incl. data)</td></tr>
+    <tr><td><strong>upfront cost</strong></td><td>~$0</td><td>indexing + infra</td><td>data curation + GPU hours</td></tr>
+    <tr><td><strong>per-call cost</strong></td><td>higher (tokens every call)</td><td>higher (retrieved context)</td><td>lower (shorter prompts)</td></tr>
+    <tr><td><strong>update speed</strong></td><td>instant</td><td>re-index (minutes)</td><td>retrain (days)</td></tr>
+    <tr><td><strong>knowledge freshness</strong></td><td>static</td><td>✓ live</td><td>frozen at train time</td></tr>
+    <tr><td><strong>behavior consistency</strong></td><td>fragile</td><td>n/a</td><td>✓ strongest</td></tr>
+    <tr><td><strong>attribution ("why?")</strong></td><td>—</td><td>✓ cites sources</td><td>—</td></tr>
+    <tr><td><strong>reversibility</strong></td><td>instant</td><td>instant</td><td>swap adapter (LoRA: easy)</td></tr>
+  </table>
+
+  <p>
+    Read the columns as a progression, not rivals: <strong>prompt → RAG → fine-tune
+    is an escalation ladder</strong>, each step justified by the previous one's
+    measured plateau. And they compose — the strongest production systems run all
+    three at once: a fine-tuned model (consistent behavior, domain fluency) fed by
+    RAG (fresh knowledge, citations) under a tight system prompt (guardrails,
+    task frame). Your own stack's endgame (M9.5 + M12) is exactly this: fine-tuned
+    <em>retriever</em>, RAG pipeline, prompted generator.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers: one scenario, three price tags</div>
+    <p>
+      Support bot, 100k queries/month, need: company knowledge + brand tone.
+      <strong>Prompt-only</strong> (stuff a 3k-token policy digest into every call):
+      ~$113/mo in extra input tokens, stale the day policies change, no sources.
+      <strong>RAG</strong>: ~$30 one-time indexing + ~$50/mo for 1.5k retrieved
+      tokens/call — current, cited, and cheaper than prompt-stuffing.
+      <strong>Tone fine-tune</strong>: ~$200 one-time (QLoRA, M8.5) + saves ~800
+      system-prompt tokens/call ≈ −$30/mo forever. Optimal build: RAG + tone-LoRA +
+      lean prompt ≈ <strong>$220 upfront, $20/mo net</strong> — cheaper AND better
+      than any single lever. The composition, not the choice, is the answer.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      You built RAG before understanding these trade-offs — most of the industry did.
+      Now audit your own system against the tree: is anything stuffed in your system
+      prompt that's really <em>knowledge</em> (→ move to RAG)? Are you re-sending
+      per-call instructions that fine-tuning would bake in at your volume? Is any
+      failure you've blamed on prompts actually a capability ceiling (→ tier change)?
+      This page is also your interview closer: "prompt vs RAG vs fine-tune?" is
+      asked in nearly every applied-LLM interview, and the sorting principle +
+      escalation ladder + composition answer is the strong form.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: run the audit on your own system</div>
+<pre><code># not a library exercise — a 30-minute structured audit of YOUR chatbot:
+
+# 1. Dump your current system prompt. Label every line:
+#    K = knowledge (facts, policies, docs)   → candidate for RAG
+#    B = behavior (tone, format, rules)      → candidate for fine-tune at volume
+#    G = guardrails (safety, scope)          → stays in prompt
+#
+# 2. From your logs, estimate: input tokens/call, calls/month.
+#    price the K-lines: tokens(K) × calls × $/token = what prompt-stuffed
+#    knowledge costs you monthly. Compare to a RAG index refresh.
+#
+# 3. List your last 10 quality complaints. Sort each:
+#    missing-knowledge / wrong-behavior / capability ceiling.
+#    Count them. That histogram IS your roadmap's priority order.
+</code></pre>
+    <p>
+      Teams that run this audit usually find 30–60% of their system prompt is
+      K-lines that belong in retrieval, and that their complaint histogram points
+      somewhere different than their backlog does. Bring the histogram to your next
+      planning meeting and watch the conversation change.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    <strong>Knowledge in the context, behavior in the weights, capability in the
+    model choice.</strong> Prompt → RAG → fine-tune is an escalation ladder climbed
+    on evidence, the levers compose rather than compete, and the strongest systems
+    run all three. Module 8 complete: you now hold the entire adaptation toolkit,
+    from head-swaps to DPO to this decision framework.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>"Should we fine-tune or use RAG?" — give the senior-engineer answer.</summary>
+      <div><p>Reframe first: they solve different failures. RAG injects KNOWLEDGE at inference — fresh, updateable, attributable; fine-tuning shapes BEHAVIOR in weights — formats, tone, domain conventions, consistency. Fine-tuning is poor at adding facts (tiny gradient pressure vs pretraining scale, instant staleness); RAG can't fix style or reliability. So: sort the actual failures, prompt first for behavior, RAG for knowledge, fine-tune when prompting plateaus at volume — and note they compose (fine-tuned model + RAG + lean prompt is the standard strong build).</p></div>
+    </details>
+    <details>
+      <summary>When does fine-tuning beat prompting for behavior, concretely?</summary>
+      <div><p>When (a) prompt-achieved consistency plateaus below requirements (e.g., 95% JSON compliance needed at 99.9%), (b) volume amortizes: per-call token savings (dropped instructions/few-shots) × calls/month exceeds training cost within weeks, (c) prompt real estate is needed for actual content (context window budget), or (d) behavior is too subtle for instructions (brand voice learned from 500 examples beats any adjective list). Prerequisites: stable task definition and enough quality examples — else you're baking in churn (M8.2's data-first rule).</p></div>
+    </details>
+    <details>
+      <summary>Why can't fine-tuning keep a model's knowledge current?</summary>
+      <div><p>Three compounding reasons: scale (thousands of examples vs trillions of pretraining tokens — facts get weak gradient support and recall unreliably), staleness (weights freeze at training time; every update is a new training run + eval + deploy cycle, days at best), and forgetting risk (aggressive fact-cramming degrades general behavior — M8.1). RAG's architecture matches knowledge's nature: it changes at data speed, needs attribution, and belongs in a store you can re-index in minutes.</p></div>
+    </details>
+    <details>
+      <summary>A team fine-tuned an LLM on their wiki to "teach it the company" and results disappoint. Post-mortem?</summary>
+      <div><p>Predictable failure: raw wiki text isn't (instruction, response) pairs, so SFT taught wiki-STYLE continuation, not question-answering over wiki FACTS; fact recall from light fine-tuning is spotty (scale mismatch); knowledge froze at training day; and no attribution exists for verification. Correct build: RAG over the wiki (chunk, embed, retrieve — their M12.1 pipeline), optionally + a small SFT for answer format/tone. Salvage: keep their eval set — it becomes the RAG golden set (M12.3). This exact scenario is a top-3 applied-LLM interview question because half the industry lived it.</p></div>
+    </details>
+    <details>
+      <summary>How do the three levers interact with model-tier choice?</summary>
+      <div><p>Tier sets the capability ceiling the levers work under: no lever adds reasoning a model lacks (the tree's third branch). Interactions: stronger models need less few-shot scaffolding (prompt savings) and follow instructions better (delaying fine-tuning's justification); weaker/cheaper models + LoRA can match stronger models on NARROW tasks at far lower serving cost (M7.4's overtrained-small-model economics applied to your stack) — the classic cost play: frontier model to prototype and generate training data, tuned small model to serve. State it as a 2D decision — tier × lever — and you sound like you've shipped.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>
