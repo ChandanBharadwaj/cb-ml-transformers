@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Decoder, Masking &amp; Generation — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="05-transformer/decoder-masking-and-generation">
+<main id="content">
+
+  <h1>Decoder, Masking &amp; Generation</h1>
+
+  <p>
+    The encoder you just built reads bidirectionally — "bank" saw "river" on its right.
+    Perfect for understanding; disqualifying for generation. A model trained to predict
+    the next word (M4.1) must never peek at it. One triangular mask converts your
+    encoder into a <strong>decoder</strong> — the GPT architecture — and explains,
+    mechanically, why your chatbot streams tokens and why output tokens cost more than
+    input tokens. This page is the second black box's floor plan.
+  </p>
+
+  <h2>The causal mask: a staircase of −∞</h2>
+
+  <p>
+    The change is embarrassingly small. In self-attention's score grid (5.3's QKᵀ),
+    before the softmax, <strong>set every score where a token would look at a
+    later position to −∞</strong>. Softmax turns −∞ into exactly 0 weight (e^−∞ = 0) —
+    the future contributes nothing to the blend. Everything else — Q/K/V, heads,
+    residuals, FFN, stacking — is untouched.
+  </p>
+
+  <figure class="anim" id="fig-mask">
+    <div class="fig-title">Animation · Masking the future</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-mk-t">
+      <title id="fig-mk-t">Causal mask zeroing the upper triangle of the attention grid</title>
+      <text x="320" y="36" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">attention scores: rows attend to columns · "the cat sat down"</text>
+      <!-- grid 4x4 -->
+      <g id="grid" class="mono">
+        <!-- column labels -->
+        <text x="205" y="78" text-anchor="middle" font-size="17" fill="#64748b">the</text>
+        <text x="305" y="78" text-anchor="middle" font-size="17" fill="#64748b">cat</text>
+        <text x="405" y="78" text-anchor="middle" font-size="17" fill="#64748b">sat</text>
+        <text x="505" y="78" text-anchor="middle" font-size="17" fill="#64748b">down</text>
+        <!-- row labels -->
+        <text x="140" y="122" text-anchor="end" font-size="17" fill="#64748b">the</text>
+        <text x="140" y="192" text-anchor="end" font-size="17" fill="#64748b">cat</text>
+        <text x="140" y="262" text-anchor="end" font-size="17" fill="#64748b">sat</text>
+        <text x="140" y="332" text-anchor="end" font-size="17" fill="#64748b">down</text>
+        <!-- cells: row1 -->
+        <rect x="160" y="96" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text x="205" y="132" text-anchor="middle" font-size="17" fill="#1d4ed8">1.0</text>
+        <rect id="m12" x="260" y="96" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text id="t12" x="305" y="132" text-anchor="middle" font-size="17" fill="#1d4ed8">.31</text>
+        <rect id="m13" x="360" y="96" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text id="t13" x="405" y="132" text-anchor="middle" font-size="17" fill="#1d4ed8">.09</text>
+        <rect id="m14" x="460" y="96" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text id="t14" x="505" y="132" text-anchor="middle" font-size="17" fill="#1d4ed8">.12</text>
+        <!-- row2 -->
+        <rect x="160" y="166" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text x="205" y="202" text-anchor="middle" font-size="17" fill="#1d4ed8">.44</text>
+        <rect x="260" y="166" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text x="305" y="202" text-anchor="middle" font-size="17" fill="#1d4ed8">1.0</text>
+        <rect id="m23" x="360" y="166" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text id="t23" x="405" y="202" text-anchor="middle" font-size="17" fill="#1d4ed8">.28</text>
+        <rect id="m24" x="460" y="166" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text id="t24" x="505" y="202" text-anchor="middle" font-size="17" fill="#1d4ed8">.07</text>
+        <!-- row3 -->
+        <rect x="160" y="236" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text x="205" y="272" text-anchor="middle" font-size="17" fill="#1d4ed8">.18</text>
+        <rect x="260" y="236" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text x="305" y="272" text-anchor="middle" font-size="17" fill="#1d4ed8">.55</text>
+        <rect x="360" y="236" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text x="405" y="272" text-anchor="middle" font-size="17" fill="#1d4ed8">1.0</text>
+        <rect id="m34" x="460" y="236" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text id="t34" x="505" y="272" text-anchor="middle" font-size="17" fill="#1d4ed8">.21</text>
+        <!-- row4 -->
+        <rect x="160" y="306" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text x="205" y="342" text-anchor="middle" font-size="17" fill="#1d4ed8">.10</text>
+        <rect x="260" y="306" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text x="305" y="342" text-anchor="middle" font-size="17" fill="#1d4ed8">.30</text>
+        <rect x="360" y="306" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text x="405" y="342" text-anchor="middle" font-size="17" fill="#1d4ed8">.42</text>
+        <rect x="460" y="306" width="90" height="60" rx="8" fill="#dbeafe" stroke="#93c5fd"/><text x="505" y="342" text-anchor="middle" font-size="17" fill="#1d4ed8">1.0</text>
+      </g>
+      <g id="warn" class="sp-hide">
+        <text x="320" y="398" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">upper triangle = looking at the FUTURE — cheating for a next-word predictor!</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-mk-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-mask svg",
+        caption: "#fig-mk-cap",
+        steps: [
+          { caption: "The full attention grid from an encoder: every token attends everywhere — including cells like ('the' → 'cat'), which look FORWARD." },
+          { caption: "For a model whose training task is 'predict the next token', those upper-triangle cells are answer keys. Row 'cat' seeing column 'sat' means it saw its own label.", show: ["#warn"] },
+          { caption: "The fix: −∞ into every future-looking score before softmax. The staircase of blocked cells IS the causal mask — softmax turns each into exactly 0 weight.",
+            attrs: { "#m12": { fill: "#1e293b" }, "#t12": { textContent: "−∞", fill: "#f87171" },
+                     "#m13": { fill: "#1e293b" }, "#t13": { textContent: "−∞", fill: "#f87171" },
+                     "#m14": { fill: "#1e293b" }, "#t14": { textContent: "−∞", fill: "#f87171" },
+                     "#m23": { fill: "#1e293b" }, "#t23": { textContent: "−∞", fill: "#f87171" },
+                     "#m24": { fill: "#1e293b" }, "#t24": { textContent: "−∞", fill: "#f87171" },
+                     "#m34": { fill: "#1e293b" }, "#t34": { textContent: "−∞", fill: "#f87171" } }, holdMs: 6000 },
+          { caption: "Each row now attends only leftward: token i sees tokens 1…i. One triangular mask converts the encoder into a decoder. That's the entire architectural difference between BERT and GPT.", holdMs: 5600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Training: predict everywhere, in parallel</h2>
+
+  <p>
+    Here's the elegance that makes decoder pretraining so efficient. With the mask in
+    place, <strong>every position can be trained simultaneously</strong>: position 1
+    predicts token 2, position 2 predicts token 3, … all in <em>one forward pass</em>,
+    because the mask guarantees no position saw its own answer. A 1,000-token document
+    yields 1,000 next-token exercises for the price of one pass — cross-entropy (M3.2)
+    at every position, averaged, backprop, step. This is how "trained on 15 trillion
+    tokens" is even feasible: the mask turns the whole corpus into dense, parallel
+    supervision (and this is where 3.3's "LLM pretraining is less than one epoch" gets
+    its denominator).
+  </p>
+
+  <h2>Inference: the loop that explains your streaming UI</h2>
+
+  <figure class="anim" id="fig-gen">
+    <div class="fig-title">Animation · Autoregressive generation, token by token</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-gn-t">
+      <title id="fig-gn-t">The generate-append-repeat loop producing tokens</title>
+      <!-- prompt -->
+      <g id="prompt" class="mono">
+        <rect x="30" y="60" width="250" height="46" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="155" y="90" text-anchor="middle" font-size="17" class="sv-ink">"The capital of France"</text>
+        <text x="155" y="42" text-anchor="middle" font-size="17" fill="#64748b">prompt (processed in ONE pass — "prefill")</text>
+      </g>
+      <!-- t1 -->
+      <g id="t1" class="sp-hide">
+        <line x1="284" y1="83" x2="330" y2="83" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#gn-a)"/>
+        <rect x="334" y="60" width="70" height="46" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="369" y="90" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">is</text>
+        <text x="369" y="126" text-anchor="middle" font-size="17" fill="#64748b">softmax → sample</text>
+      </g>
+      <!-- t2 -->
+      <g id="t2" class="sp-hide">
+        <rect x="30" y="170" width="374" height="46" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="217" y="200" text-anchor="middle" font-size="17" class="mono sv-ink">"The capital of France is" ← appended</text>
+        <line x1="408" y1="193" x2="452" y2="193" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#gn-a)"/>
+        <rect x="456" y="170" width="90" height="46" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="501" y="200" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">Paris</text>
+      </g>
+      <!-- t3 -->
+      <g id="t3" class="sp-hide">
+        <rect x="30" y="280" width="460" height="46" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="260" y="310" text-anchor="middle" font-size="17" class="mono sv-ink">"The capital of France is Paris" ← appended</text>
+        <line x1="494" y1="303" x2="538" y2="303" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#gn-a)"/>
+        <rect x="542" y="280" width="70" height="46" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="577" y="310" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">.</text>
+      </g>
+      <g id="loop-note" class="sp-hide">
+        <rect x="30" y="344" width="580" height="30" rx="9" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="320" y="365" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">one FULL forward pass per token — serial, unavoidable, and exactly what you're billed for</text>
+      </g>
+      <defs>
+        <marker id="gn-a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#94a3b8"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-gn-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-gen svg",
+        caption: "#fig-gn-cap",
+        steps: [
+          { caption: "The prompt is processed in one parallel pass ('prefill') — all its tokens attend among themselves at once. Fast per token." },
+          { caption: "The final position's output becomes next-token probabilities (softmax over the vocab); one token is sampled (temperature lives here — M11.1): <b>'is'</b>.", show: ["#t1"] },
+          { caption: "Append it. Run the model again on the grown sequence. Sample: <b>'Paris'</b>. This is M4.1's chain rule, executing.", show: ["#t2"] },
+          { caption: "Append, run, sample, repeat — until an end-of-sequence token or a length cap.", show: ["#t3"] },
+          { caption: "Each output token needs a full model pass, serially — that's why responses STREAM word by word, and why output tokens are priced higher than input. (The trick that makes each pass cheap — reusing past K/V — is the KV cache, M11.2.)", show: ["#loop-note"], holdMs: 6400 }
+        ]
+      });
+    });
+  </script>
+
+  <p>
+    One honest asterisk for completeness: training feeds each position the <em>true</em>
+    previous tokens (teacher forcing), while generation feeds the model its own
+    previous outputs — so early mistakes can compound in ways training never showed it
+    (exposure bias). It's a known, mostly-tolerated mismatch; RLHF-era tuning (M8.4)
+    partially addresses it by training on the model's own generations.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      The two-phase cost structure, in your API bill: <strong>prefill</strong> processes
+      the whole prompt in parallel (compute-heavy, cheap per token), then
+      <strong>decode</strong> emits ~20–100 tokens/second serially. That's why
+      time-to-first-token and tokens-per-second are quoted separately in every serving
+      benchmark — and why input tokens cost roughly <strong>3–5× less</strong> than
+      output tokens on most APIs. A 2,000-token RAG prompt + 300-token answer spends
+      most of its <em>wall-clock</em> on those 300 serial steps.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Mysteries from your production life, now mechanical: <strong>streaming UIs</strong>
+      exist because tokens are physically produced one at a time — the stream is the
+      computation, not a UX flourish. <strong>Output pricing</strong> reflects serial
+      full passes per token. <strong>max_tokens</strong> caps the loop's iterations.
+      And "the model started strong then went off the rails" is exposure bias plus
+      sampling compounding — each slightly-off token becomes conditioning for the next.
+      Your second black box now has moving parts you can name.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: implement the mask and the loop</div>
+<pre><code>import numpy as np
+
+def softmax_rows(Z):
+    e = np.exp(Z - Z.max(-1, keepdims=True)); return e / e.sum(-1, keepdims=True)
+
+# --- the causal mask, from scratch ---
+n = 4
+S = np.random.default_rng(0).normal(size=(n, n))     # pretend scores (QK^T/√d)
+mask = np.triu(np.ones((n, n)), k=1).astype(bool)    # upper triangle = future
+S[mask] = -1e9                                       # the page's −∞
+A = softmax_rows(S)
+print(A.round(3))          # upper triangle is 0.000 — future erased ✓
+
+# --- the generation loop, with a real model ---
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+tok = AutoTokenizer.from_pretrained("gpt2")
+lm  = AutoModelForCausalLM.from_pretrained("gpt2")
+ids = tok("The capital of France", return_tensors="pt").input_ids
+for _ in range(8):                                   # the animation, literally
+    logits = lm(ids).logits[0, -1]
+    nxt = logits.argmax()                            # greedy (T=0)
+    ids = torch.cat([ids, nxt.view(1, 1)], dim=1)
+    print(tok.decode(ids[0]))
+</code></pre>
+    <p>
+      Watch the sentence grow one token per iteration — your chatbot's streaming,
+      reproduced in nine lines. Then swap <code>argmax</code> for temperature sampling
+      (<code>torch.multinomial(torch.softmax(logits/0.8, -1), 1)</code>) and run twice:
+      different outputs, same model — M11.1's whole topic, previewed.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Decoder = encoder + <strong>a triangular mask</strong> (future scores → −∞ → weight
+    0). Training: all positions predict their next token in one parallel pass.
+    Inference: generate–append–repeat, one full pass per output token — which is why
+    LLMs stream, why output costs more, and why the KV cache had to be invented.
+    You have now built both black boxes from the map page.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>What is causal (masked) self-attention and why is it needed?</summary>
+      <div><p>Self-attention where each position may only attend to itself and earlier positions, enforced by setting future-position scores to −∞ before softmax (→ exactly zero weight). Needed because a next-token predictor trained with visibility of the future would learn to copy the answer rather than model language — the mask makes the training task honest while keeping training fully parallel across positions.</p></div>
+    </details>
+    <details>
+      <summary>Why is decoder TRAINING parallel but INFERENCE serial?</summary>
+      <div><p>Training: the full target text exists, so with the causal mask every position predicts its next token simultaneously in one pass — n training examples per sequence per step. Inference: token t+1's distribution depends on token t, which must be generated first — the dependency chain is real, so generation is inherently one-token-per-pass. This asymmetry drives all serving economics: cheap parallel prefill, expensive serial decode.</p></div>
+    </details>
+    <details>
+      <summary>Architecturally, what's the difference between BERT and GPT?</summary>
+      <div><p>Nearly nothing but the mask and the objective: BERT = encoder blocks (bidirectional attention) trained with masked-LM (M6.2); GPT = the same blocks with causal masking, trained on next-token prediction. The tiny difference dictates use: bidirectional context → understanding/embedding tasks; causal → generation. (Plus detail differences: pre/post-LN, positions, tokenizers — but the mask is the essence.)</p></div>
+    </details>
+    <details>
+      <summary>What are prefill and decode phases, and why do they perform so differently?</summary>
+      <div><p>Prefill: the prompt's tokens processed in one parallel pass — big matrix multiplies, compute-bound, high throughput. Decode: each new token requires a full serial pass conditioned on everything so far — small matrices per step, memory-bandwidth-bound, ~20–100 tok/s. Consequences: time-to-first-token ≈ prefill, generation speed ≈ decode, output tokens priced above input, and the KV cache (M11.2) exists to stop decode from recomputing the past.</p></div>
+    </details>
+    <details>
+      <summary>What is exposure bias?</summary>
+      <div><p>The train/inference mismatch of autoregressive models: training always conditions on ground-truth prefixes (teacher forcing), but at inference the model conditions on its own possibly-imperfect outputs — a distribution it never saw during pretraining, so early errors can compound. Mitigations in practice: better sampling (nucleus), RLHF-style tuning on model-generated text, and self-correction patterns. Worth naming precisely; interviewers often accept the concept without the term, but the term marks depth.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

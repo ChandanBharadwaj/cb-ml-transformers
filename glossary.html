@@ -12,12 +12,19 @@
   <h1>Glossary</h1>
   <p>Every important term from the course, A–Z, each linking back to the page that teaches it. This list grows as modules are published.</p>
 
+  <h2>A</h2>
+  <p><strong>Attention</strong> — score a query against every key (dot products), softmax into weights, blend the values: a differentiable, learnable lookup. The core mechanism of modern AI. → <a href="04-sequences-attention/attention-is-born.html">Attention Is Born</a></p>
+  <p><strong>Autoregressive generation</strong> — produce a token, append it, run again: one full model pass per output token. Why LLMs stream. → <a href="05-transformer/decoder-masking-and-generation.html">Decoder, Masking &amp; Generation</a></p>
+
   <h2>B</h2>
+  <p><strong>BPE (Byte-Pair Encoding)</strong> — build a vocabulary by repeatedly merging the most frequent adjacent pair; frequent words stay whole, everything else spells out of pieces. → <a href="05-transformer/tokenization-bpe-wordpiece.html">Tokenization</a></p>
   <p><strong>Bias</strong> — the learned vector added after a layer's matrix multiply (the +b in Wx + b); lets the layer shift space, not just warp it. → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
   <p><strong>Backpropagation</strong> — blame flowing backward through the network, multiplying by each stage's local slope (chain rule), yielding every parameter's gradient in one sweep. → <a href="03-neural-nets/backprop-intuition.html">Backpropagation, Intuitively</a></p>
   <p><strong>Batch / mini-batch</strong> — the handful of examples processed per training step; its size trades gradient smoothness against memory. → <a href="03-neural-nets/gradient-descent-training-loop.html">The Training Loop</a></p>
 
   <h2>C</h2>
+  <p><strong>Causal mask</strong> — the −∞ staircase in attention scores that blocks looking at future tokens; the one difference between BERT's body and GPT's. → <a href="05-transformer/decoder-masking-and-generation.html">Decoder, Masking &amp; Generation</a></p>
+  <p><strong>Cross-attention</strong> — attention where queries come from the decoder and keys/values from the encoder's output; how translation models and Whisper consult their input. → <a href="05-transformer/encoder-vs-decoder-vs-both.html">Encoder vs Decoder vs Both</a></p>
   <p><strong>Contrastive learning</strong> — training by pulling positive pairs together and pushing negatives apart in embedding space; powers word2vec, sentence-transformers, CLIP, and RAG retrievers. → <a href="02-embeddings/negative-sampling.html">Negative Sampling</a></p>
   <p><strong>Cross-entropy</strong> — the loss −log P(truth): a surprise meter that punishes confident mistakes hardest. What LLMs train on. → <a href="03-neural-nets/softmax-and-cross-entropy.html">Softmax &amp; Cross-Entropy</a></p>
   <p><strong>Cosine similarity</strong> — the dot product of two vectors after removing their lengths; measures direction agreement, from −1 to 1. The score behind every vector search. → <a href="01-math/dot-product-similarity.html">Dot Product = Similarity</a></p>
@@ -29,6 +36,7 @@
   <p><strong>Dot product</strong> — multiply two vectors slot-by-slot and add it all up; one number measuring agreement. → <a href="01-math/dot-product-similarity.html">Dot Product = Similarity</a></p>
 
   <h2>E</h2>
+  <p><strong>Encoder / decoder</strong> — the reads-bidirectionally stack (BERT/MiniLM: vectors out) vs the causally-masked stack (GPT: next tokens out); enc-dec combines both via cross-attention. → <a href="05-transformer/encoder-vs-decoder-vs-both.html">Encoder vs Decoder vs Both</a></p>
   <p><strong>Epoch</strong> — one full pass over the training set; fine-tuning uses a few, LLM pretraining often less than one. → <a href="03-neural-nets/gradient-descent-training-loop.html">The Training Loop</a></p>
   <p><strong>Embedding</strong> — a learned vector that represents meaning, placed so that similar things are near each other. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>
 
@@ -37,13 +45,22 @@
   <p><strong>Gradient</strong> — the slope of the loss in every direction at once; points uphill, so training steps the other way. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
   <p><strong>Gradient descent</strong> — repeat: measure the slope, step downhill. The algorithm behind all model training. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
 
+  <h2>F</h2>
+  <p><strong>FFN (feed-forward network)</strong> — the per-token expand→GELU→compress block after attention; holds ~⅔ of a transformer's parameters and most of its stored facts. → <a href="05-transformer/residuals-layernorm-ffn.html">Residuals, LayerNorm &amp; FFN</a></p>
+
+  <h2>K</h2>
+  <p><strong>KV / Q (query, key, value)</strong> — a token's three learned roles: what I seek, what I advertise, what I hand over. Attention = softmax(QKᵀ/√d)·V. → <a href="05-transformer/self-attention-qkv.html">Self-Attention: Q, K, V</a></p>
+
   <h2>L</h2>
+  <p><strong>LayerNorm</strong> — re-center and re-scale each token's vector (then learned γ, β); the thermostat keeping hundreds of residual additions numerically sane. → <a href="05-transformer/residuals-layernorm-ffn.html">Residuals, LayerNorm &amp; FFN</a></p>
+  <p><strong>Language model</strong> — a machine assigning probabilities to the next token given a prefix; every LLM capability is this task in a loop. → <a href="04-sequences-attention/language-modeling.html">Language Modeling &amp; Perplexity</a></p>
   <p><strong>Leakage</strong> — test information contaminating training (shared preprocessing stats, duplicates across splits, temporal mixing); the silent killer of honest metrics. → <a href="03-neural-nets/gradient-descent-training-loop.html">The Training Loop</a></p>
   <p><strong>Logit</strong> — a raw pre-softmax score (w·x + b); one per class or vocabulary token at a model's output. → <a href="03-neural-nets/the-neuron.html">The Neuron</a></p>
   <p><strong>Learning rate</strong> — how big each downhill step is. Too big bounces, too small crawls. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
   <p><strong>Loss</strong> — a single number scoring how wrong the model currently is; training exists to push it down. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
 
   <h2>M</h2>
+  <p><strong>Multi-head attention</strong> — h parallel attentions in d/h-dim learned subspaces, concatenated and mixed by W_O; several glance patterns for the price of one. → <a href="05-transformer/multi-head-attention.html">Multi-Head Attention</a></p>
   <p><strong>Matrix</strong> — a grid of numbers that transforms vectors; every "layer" of a neural network is one (plus a bend). → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
 
   <h2>N</h2>
@@ -56,16 +73,25 @@
   <p><strong>Overfitting</strong> — memorizing training data instead of learning patterns; visible as train loss falling while validation loss rises. → <a href="03-neural-nets/gradient-descent-training-loop.html">The Training Loop</a></p>
 
   <h2>P</h2>
+  <p><strong>Perplexity</strong> — e^loss: the number of tokens a language model effectively hesitates between per step. Lower = better. → <a href="04-sequences-attention/language-modeling.html">Language Modeling &amp; Perplexity</a></p>
+  <p><strong>Positional encoding</strong> — the order-stamp added to (or rotated into) token vectors, since attention itself is order-blind: sinusoids, learned rows (the 512 limit), or RoPE. → <a href="05-transformer/embeddings-and-positional-encoding.html">Embeddings &amp; Positional Encoding</a></p>
   <p><strong>Precision / recall / F1</strong> — "when I flag, am I right?" / "do I find them all?" / their strict harmonic mean. The measurement kit for imbalanced problems. → <a href="03-neural-nets/measuring-models.html">Measuring Models</a></p>
   <p><strong>Parameter</strong> — one learned number inside a model. "7B model" = seven billion of these. → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
 
+  <h2>R</h2>
+  <p><strong>Residual connection</strong> — x + layer(x): each layer adds a correction to a highway whose backward slope is exactly 1, curing vanishing gradients and making depth safe. → <a href="05-transformer/residuals-layernorm-ffn.html">Residuals, LayerNorm &amp; FFN</a></p>
+  <p><strong>RoPE (rotary position embedding)</strong> — rotate Q and K by position-proportional angles so attention depends on relative token distance; the position scheme behind 128k contexts. → <a href="05-transformer/embeddings-and-positional-encoding.html">Embeddings &amp; Positional Encoding</a></p>
+
   <h2>S</h2>
+  <p><strong>Self-attention</strong> — a sentence attending to itself: every token queries every token, updating each vector with weighted context. The bank-problem killer. → <a href="05-transformer/self-attention-qkv.html">Self-Attention: Q, K, V</a></p>
+  <p><strong>Seq2seq bottleneck</strong> — forcing a whole input through one fixed-size vector between encoder and decoder; its measured failure gave birth to attention. → <a href="04-sequences-attention/seq2seq-and-the-bottleneck.html">Seq2Seq &amp; the Bottleneck</a></p>
   <p><strong>Skip-gram</strong> — word2vec's flavor where the center word predicts its context words via two embedding matrices and a dot product. → <a href="02-embeddings/word2vec-skip-gram.html">word2vec: Skip-Gram Internals</a></p>
   <p><strong>Softmax</strong> — exponentiate-and-normalize: logits → probabilities; temperature is a divisor inside it. → <a href="03-neural-nets/softmax-and-cross-entropy.html">Softmax &amp; Cross-Entropy</a></p>
   <p><strong>Static vs contextual embeddings</strong> — one fixed vector per word (word2vec) vs a fresh vector per word per sentence (BERT/MiniLM); the "bank" problem is the divide. → <a href="02-embeddings/embedding-properties-and-limits.html">Properties &amp; Limits</a></p>
   <p><strong>Similarity matrix</strong> — every pairwise cosine at once (E·Eᵀ): diagonal of 1s, symmetric, topic clusters visible as blocks. The same grid shape underlies attention (M5) and contrastive training (M9). → <a href="01-math/dot-product-similarity.html">Dot Product = Similarity</a></p>
 
   <h2>T</h2>
+  <p><strong>Token / tokenization</strong> — the subword units models actually read; all context limits and prices are counted in them. ~¾ of an English word each. → <a href="05-transformer/tokenization-bpe-wordpiece.html">Tokenization</a></p>
   <p><strong>Temperature</strong> — a divisor applied to logits before softmax: low = sharp/deterministic, high = flat/creative. The API parameter, demystified. → <a href="03-neural-nets/softmax-and-cross-entropy.html">Softmax &amp; Cross-Entropy</a></p>
 
   <h2>V</h2>

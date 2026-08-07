@@ -56,7 +56,6 @@ window.SITE_MANIFEST = {
       slug: "04-sequences-attention",
       num: "M4",
       title: "Sequences & the Road to Attention",
-      coming: true,
       pages: [
         { slug: "language-modeling", title: "Language Modeling & Perplexity" },
         { slug: "rnns-and-lstms-briefly", title: "RNNs & LSTMs, Briefly" },
@@ -68,7 +67,6 @@ window.SITE_MANIFEST = {
       slug: "05-transformer",
       num: "M5",
       title: "The Transformer, Piece by Piece",
-      coming: true,
       pages: [
         { slug: "tokenization-bpe-wordpiece", title: "Tokenization: BPE & WordPiece" },
         { slug: "embeddings-and-positional-encoding", title: "Embeddings & Positional Encoding" },

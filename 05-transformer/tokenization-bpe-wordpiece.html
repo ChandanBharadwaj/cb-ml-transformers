@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tokenization: BPE &amp; WordPiece — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="05-transformer/tokenization-bpe-wordpiece">
+<main id="content">
+
+  <h1>Tokenization: BPE &amp; WordPiece</h1>
+
+  <p>
+    The transformer module begins at the loading dock: before any attention happens,
+    text must become a sequence of IDs from a fixed vocabulary. That conversion —
+    tokenization — quietly explains a dozen oddities you've met in production: why
+    token counts never match word counts, why models fumble counting letters in
+    "strawberry", why non-English text costs more, and why your RAG chunker measures
+    tokens. All of it falls out of one greedy little algorithm.
+  </p>
+
+  <h2>Why not words? Why not characters?</h2>
+
+  <p>
+    <strong>Words fail</strong> for the reason M2.4 taught: fixed vocabularies meet
+    unlimited language. "Kubernetes", "COVID-19", typos, German compound nouns — all
+    out-of-vocabulary, all mapped to a useless <code>&lt;UNK&gt;</code>.
+    <strong>Characters fail</strong> the opposite way: "understanding" becomes 13 steps
+    of nearly-meaningless input, sequences balloon (remember attention's O(n²) bill from
+    M4.4), and the model wastes capacity re-learning that t-h-e spells a word.
+    The answer sits between: <strong>subwords</strong> — frequent words stay whole,
+    rare words split into meaningful, reusable pieces. fastText's n-gram insight
+    (M2.4), industrialized.
+  </p>
+
+  <h2>BPE: the merge game</h2>
+
+  <p>
+    <strong>Byte-Pair Encoding</strong> builds the vocabulary bottom-up from data.
+    Start with single characters. Then repeat one move: <em>find the most frequent
+    adjacent pair of tokens in the corpus, merge it into a new token, add it to the
+    vocabulary.</em> Run 30,000–100,000 merges. That's the entire algorithm:
+  </p>
+
+  <figure class="anim" id="fig-bpe">
+    <div class="fig-title">Animation · BPE learns its vocabulary, merge by merge</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-bpe-t">
+      <title id="fig-bpe-t">Byte pair encoding merges on a tiny corpus</title>
+      <text x="30" y="44" font-size="18" class="sv-ink" font-weight="700">tiny corpus: "low lower lowest slow slowest"</text>
+      <!-- state rows -->
+      <g id="row0" class="mono">
+        <text x="30" y="88" font-size="17" fill="#64748b">start:</text>
+        <text id="txt0" x="110" y="88" font-size="17" class="sv-ink">l·o·w  l·o·w·e·r  l·o·w·e·s·t  s·l·o·w  s·l·o·w·e·s·t</text>
+      </g>
+      <g id="row1" class="sp-hide">
+        <rect x="24" y="108" width="592" height="36" rx="8" fill="#dbeafe"/>
+        <text x="30" y="132" font-size="17" fill="#1d4ed8" class="mono">merge 1: "l"+"o" (5×) → "lo"&nbsp;&nbsp;&nbsp;lo·w lo·w·e·r lo·w·e·s·t s·lo·w …</text>
+      </g>
+      <g id="row2" class="sp-hide">
+        <rect x="24" y="152" width="592" height="36" rx="8" fill="#dbeafe"/>
+        <text x="30" y="176" font-size="17" fill="#1d4ed8" class="mono">merge 2: "lo"+"w" (5×) → "low"&nbsp;&nbsp;&nbsp;low low·e·r low·e·s·t s·low …</text>
+      </g>
+      <g id="row3" class="sp-hide">
+        <rect x="24" y="196" width="592" height="36" rx="8" fill="#dbeafe"/>
+        <text x="30" y="220" font-size="17" fill="#1d4ed8" class="mono">merge 3: "e"+"s" → "es" · merge 4: "es"+"t" → "est"</text>
+      </g>
+      <g id="row4" class="sp-hide">
+        <rect x="24" y="240" width="592" height="36" rx="8" fill="#d1fae5"/>
+        <text x="30" y="264" font-size="17" fill="#047857" class="mono">vocab so far: chars + {lo, low, es, est, er, slow}</text>
+      </g>
+      <g id="row5" class="sp-hide">
+        <rect x="24" y="292" width="592" height="72" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="320" y="320" text-anchor="middle" font-size="17" fill="#92400e" font-weight="700">new word, never seen: "lowness" → low + n + es + s</text>
+        <text x="320" y="348" text-anchor="middle" font-size="17" fill="#92400e">no &lt;UNK&gt; possible — anything spells out of the pieces</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-bpe-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-bpe svg",
+        caption: "#fig-bpe-cap",
+        steps: [
+          { caption: "Everything starts as single characters — the guaranteed-coverage floor." },
+          { caption: "Count all adjacent pairs. 'l·o' appears 5 times — most frequent. Merge it: 'lo' joins the vocabulary.", show: ["#row1"] },
+          { caption: "Recount, merge again: 'lo·w' → 'low'. Frequent words are reassembling themselves.", show: ["#row2"] },
+          { caption: "More merges capture SUFFIXES: 'es', 'est', 'er'. Nobody told it about English morphology — frequency statistics discovered it.", show: ["#row3"] },
+          { caption: "The vocabulary is now a learned parts-kit: common words whole, common word-pieces ready for reuse.", show: ["#row4"] },
+          { caption: "The payoff: an unseen word tokenizes into known pieces. Rare/new/misspelled words cost more tokens but are never unrepresentable. This is how the OOV problem died.", show: ["#row5"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <p>
+    Real tokenizers run this on hundreds of gigabytes, producing merge tables like:
+    rank 1 <code>"t"+"h"</code>, rank 2 <code>"th"+"e"</code>… down to rank 50,000.
+    At inference, text is tokenized by replaying merges in rank order — deterministic
+    and fast. Two details worth knowing by name: <strong>byte-level BPE</strong>
+    (GPT-family) starts from raw bytes, so <em>any</em> string — emoji, Klingon,
+    binary garbage — is tokenizable; <strong>WordPiece</strong> (BERT/MiniLM family)
+    is the same shape but merges the pair with highest <em>likelihood gain</em> rather
+    than raw count, and marks word-continuations with <code>##</code>
+    ("unhappiness" → <code>un ##happi ##ness</code>). <strong>SentencePiece</strong>
+    treats spaces as just another symbol (the ▁ you see in Llama tokens), making it
+    language-agnostic. Same family, different accents.
+  </p>
+
+  <h2>The consequences you've already met</h2>
+
+  <figure class="anim" id="fig-conseq">
+    <div class="fig-title">Animation · Four production mysteries, one cause</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-cq-t">
+      <title id="fig-cq-t">Tokenization explaining counting, pricing, multilingual costs and letter tasks</title>
+      <g id="c1">
+        <rect x="24" y="36" width="592" height="76" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="40" y="64" font-size="17" class="sv-ink" font-weight="700">"strawberry" has how many r's?</text>
+        <text x="40" y="94" font-size="17" class="mono" fill="#1d4ed8">model sees: [str][aw][berry] — three opaque IDs, no letters at all</text>
+      </g>
+      <g id="c2" class="sp-hide">
+        <rect x="24" y="128" width="592" height="76" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="40" y="156" font-size="17" class="sv-ink" font-weight="700">"why is my token count ≠ word count?"</text>
+        <text x="40" y="186" font-size="17" class="mono" fill="#1d4ed8">"I love Kubernetes" = 3 words → [I][ love][ Kub][ernet][es] = 5 tokens</text>
+      </g>
+      <g id="c3" class="sp-hide">
+        <rect x="24" y="220" width="592" height="76" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="40" y="248" font-size="17" class="sv-ink" font-weight="700">"why does Hindi/Kannada text cost more?"</text>
+        <text x="40" y="278" font-size="17" class="mono" fill="#1d4ed8">merges were learned on English-heavy data → fewer, shorter merges elsewhere</text>
+      </g>
+      <g id="c4" class="sp-hide">
+        <rect x="24" y="312" width="592" height="76" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="40" y="340" font-size="17" class="sv-ink" font-weight="700">"why do I chunk documents by tokens, not characters?"</text>
+        <text x="40" y="370" font-size="17" class="mono" fill="#1d4ed8">context windows, pricing, model input limits — ALL denominated in tokens</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-cq-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-conseq svg",
+        caption: "#fig-cq-cap",
+        steps: [
+          { caption: "The famous letter-counting failure isn't stupidity — the model literally never sees letters. It sees subword IDs; 'berry' is one opaque symbol. Asking it to count r's is asking you to count the r's in a word you only heard spoken." },
+          { caption: "Token ≈ ¾ of an English word on average. Common words = 1 token; rare/technical words shatter. Your API bill is counted in these.", show: ["#c2"] },
+          { caption: "Tokenizer fairness is data-driven: languages underrepresented in the training corpus get worse merges — 2–4× more tokens for the same meaning, which means 2–4× cost and context usage.", show: ["#c3"] },
+          { caption: "And your RAG chunker's token-based splitting isn't convention — it's matching the units the model, its window, and its pricing actually operate in.", show: ["#c4"], holdMs: 5800 }
+        ]
+      });
+    });
+  </script>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Same sentence — <em>"The transformer architecture revolutionized NLP"</em> —
+      through three real tokenizers: GPT-4's <code>cl100k_base</code> (100k vocab):
+      <strong>8 tokens</strong>; GPT-2 (50k): <strong>9 tokens</strong>; BERT WordPiece
+      (30k): <strong>10 tokens</strong> including <code>##ized</code>. Rule-of-thumb
+      economics: 1 token ≈ 4 characters ≈ 0.75 English words. Vocab-size trade-off in
+      one line: bigger vocab → shorter sequences (cheaper attention) but a bigger
+      embedding table — 100k tokens × 4096 dims ≈ <strong>400M parameters</strong>
+      before the first transformer layer even runs.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Look at MiniLM's config with today's eyes: <code>"vocab_size": 30522</code> —
+      that's a WordPiece vocabulary, and it's why M1.3's parameter audit found an
+      11.7M-parameter embedding table (30,522 × 384). When your RAG splitter is set to
+      "512 tokens max", that's MiniLM's <code>max_position_embeddings</code> —
+      next page explains that number. And every "context window exceeded" error you've
+      ever caught was this page's units doing the counting.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: dissect three tokenizers on your own prompts</div>
+<pre><code># pip install tiktoken transformers
+import tiktoken
+from transformers import AutoTokenizer
+
+gpt4 = tiktoken.get_encoding("cl100k_base")
+bert = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+
+for text in ["The transformer architecture revolutionized NLP",
+             "unhappiness", "strawberry", "Kubernetes pod eviction",
+             "ಕನ್ನಡ ಭಾಷೆ"]:                       # try your own languages!
+    g = [gpt4.decode([t]) for t in gpt4.encode(text)]
+    b = bert.tokenize(text)
+    print(f"\n{text!r}")
+    print(f"  GPT-4 ({len(g)} tok): {g}")
+    print(f"  BERT  ({len(b)} tok): {b}")
+</code></pre>
+    <p>
+      Paste in a real prompt from your chatbot and a chunk from your RAG corpus.
+      Finding a domain term that shatters into 6 tokens tells you something practical:
+      that term's meaning is being assembled from pieces every single call — one reason
+      domain fine-tuning (M8/M9) helps.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Tokenization = a <strong>learned compression dictionary</strong>: greedy merges of
+    frequent pairs, giving frequent words one ID and spelling everything else from
+    pieces — OOV eliminated by construction. Models see only these IDs (never letters),
+    all limits and prices are denominated in them, and the tokenizer's training data
+    decides who pays more. Now the IDs need meaning — next page, the embedding table.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Why do all modern LLMs use subword tokenization rather than words or characters?</summary>
+      <div><p>Words: unbounded vocabulary → OOV failures and giant embedding tables. Characters: guaranteed coverage but sequences 4–5× longer (quadratic attention cost) and semantically empty units. Subwords interpolate: ~30k–100k units where frequent words stay whole and rare words decompose into meaningful, reusable pieces — full coverage, moderate lengths, morphology captured for free.</p></div>
+    </details>
+    <details>
+      <summary>Walk through the BPE training algorithm and how inference-time tokenization works.</summary>
+      <div><p>Training: initialize the vocab with characters (or bytes); repeatedly count all adjacent token pairs in the corpus, merge the most frequent pair into a new symbol, record the merge; stop at the target vocab size. Inference: split text to characters, then apply the recorded merges in learned priority order until no more apply. Deterministic, fast, and the merge table IS the tokenizer.</p></div>
+    </details>
+    <details>
+      <summary>Why can't LLMs reliably count letters or reverse words?</summary>
+      <div><p>They never observe characters — input is subword IDs, and "berry" is a single opaque embedding with no internal letter structure exposed. Character-level facts are only learnable indirectly (from spelling-related text in training data), which is unreliable. Tasks that force per-character access (counting, reversing, acrostics) probe exactly the representation gap the tokenizer created. Fixes: tool use (let it call code), or character-level prompting tricks.</p></div>
+    </details>
+    <details>
+      <summary>What are the trade-offs in choosing vocabulary size?</summary>
+      <div><p>Larger vocab: shorter sequences (cheaper O(n²) attention, more content per context window) and whole-word tokens for more terms, but a bigger embedding table (vocab × d parameters — can dwarf small models), rarer tokens get under-trained embeddings, and softmax over the vocab costs more. Smaller vocab: the reverse. Sweet spots have drifted up with model size: 30k (BERT) → 50k (GPT-2) → 100k+ (GPT-4) → 128k–256k (multilingual frontier models, partly for language equity).</p></div>
+    </details>
+    <details>
+      <summary>Your multilingual users report higher costs and worse quality than English users. Explain via tokenization.</summary>
+      <div><p>The tokenizer's merges were learned on training data where English dominates, so English gets efficient long merges while other scripts fragment into many short tokens — the same content costs 2–4× more tokens (direct pricing impact), consumes context window faster, and gives the model fewer, noisier units to reason over (quality impact). Mitigations: models with multilingual-balanced tokenizers, or language-specific models. This is a great interview answer because it connects an invisible preprocessing choice to user-visible cost and fairness.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

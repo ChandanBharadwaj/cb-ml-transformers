@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seq2Seq &amp; the Bottleneck — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="04-sequences-attention/seq2seq-and-the-bottleneck">
+<main id="content">
+
+  <h1>Seq2Seq &amp; the Bottleneck</h1>
+
+  <p>
+    2014: the field wants machine translation — a sequence in, a <em>different</em>
+    sequence out. The architecture invented for it, <strong>seq2seq</strong>, introduced
+    two characters who star in everything since: the <strong>encoder</strong> and the
+    <strong>decoder</strong>. It also contained a flaw so visible, so measurable, that
+    fixing it produced attention itself. This page is the setup for that punchline.
+  </p>
+
+  <h2>Encoder reads, decoder writes</h2>
+
+  <p>
+    The design: one RNN (the <strong>encoder</strong>) reads the entire source sentence
+    and hands over its final hidden state — one vector meant to contain <em>the whole
+    meaning</em>. A second RNN (the <strong>decoder</strong>) takes that vector and
+    generates the target sentence from it, token by token (M4.1's chain rule at work).
+    Two specialists: a reader that compresses, a writer that expands.
+  </p>
+
+  <figure class="anim" id="fig-squeeze">
+    <div class="fig-title">Animation · The one-vector handoff</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-sq-t">
+      <title id="fig-sq-t">An encoder squeezing a sentence into one vector that starves the decoder</title>
+      <!-- source sentence -->
+      <g id="src" class="mono">
+        <text x="30" y="60" font-size="17" class="sv-ink">Die</text>
+        <text x="85" y="60" font-size="17" class="sv-ink">Katze,</text>
+        <text x="165" y="60" font-size="17" class="sv-ink">die</text>
+        <text x="215" y="60" font-size="17" class="sv-ink">gestern</text>
+        <text x="310" y="60" font-size="17" class="sv-ink">im</text>
+        <text x="355" y="60" font-size="17" class="sv-ink">Garten</text>
+        <text x="440" y="60" font-size="17" class="sv-ink">spielte,</text>
+        <text x="540" y="60" font-size="17" class="sv-ink">schlief</text>
+      </g>
+      <!-- encoder box -->
+      <g id="enc">
+        <rect x="60" y="100" width="510" height="56" rx="12" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+        <text x="315" y="136" text-anchor="middle" font-size="18" fill="#1d4ed8" font-weight="700">ENCODER (an RNN reading left → right)</text>
+      </g>
+      <!-- funnel to single vector -->
+      <g id="funnel" class="sp-hide">
+        <path d="M 120 160 L 315 205 M 510 160 L 315 205" stroke="#94a3b8" stroke-width="2.5" fill="none"/>
+        <rect x="255" y="210" width="120" height="46" rx="10" fill="#1e293b"/>
+        <text x="315" y="240" text-anchor="middle" font-size="17" fill="#fbbf24" class="mono">one vector</text>
+        <text x="315" y="285" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">the ENTIRE sentence must fit in here</text>
+      </g>
+      <!-- decoder -->
+      <g id="dec" class="sp-hide">
+        <line x1="315" y1="294" x2="315" y2="316" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#sq-a)"/>
+        <rect x="60" y="322" width="510" height="56" rx="12" fill="#fef3c7" stroke="#fcd34d" stroke-width="2"/>
+        <text x="315" y="350" text-anchor="middle" font-size="18" fill="#b45309" font-weight="700">DECODER: generates "The cat, which played…"</text>
+        <text x="315" y="371" text-anchor="middle" font-size="17" fill="#b45309">from that one vector alone</text>
+      </g>
+      <defs>
+        <marker id="sq-a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#94a3b8"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-sq-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-squeeze svg",
+        caption: "#fig-sq-cap",
+        steps: [
+          { caption: "A German sentence enters the encoder RNN — read word by word, exactly like last page's baton pass." },
+          { caption: "The handoff: everything the encoder read gets funneled into its FINAL hidden state. One fixed-size vector, maybe 1000 numbers, is now the sentence's sole representative.", show: ["#funnel"] },
+          { caption: "The decoder gets only that vector and must reconstruct meaning, grammar, and every detail in another language. For short sentences: fine. For long ones… next animation.", show: ["#dec"], holdMs: 5600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The bottleneck, measured</h2>
+
+  <p>
+    You can already predict the failure from M4.2: the final hidden state over-represents
+    the <em>end</em> of the sentence and dilutes the beginning. For a 40-word sentence,
+    early words pass through 40 lossy updates before the decoder ever starts. The
+    beautiful thing — this isn't hand-waving; it showed up as a clean, damning curve in
+    the 2014 benchmarks:
+  </p>
+
+  <figure class="anim" id="fig-cliff">
+    <div class="fig-title">Animation · Translation quality vs sentence length</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-cl-t">
+      <title id="fig-cl-t">Quality curve collapsing with sentence length for fixed-vector seq2seq</title>
+      <line x1="70" y1="300" x2="600" y2="300" stroke="#cbd5e1" stroke-width="2.5"/>
+      <line x1="70" y1="50" x2="70" y2="300" stroke="#cbd5e1" stroke-width="2.5"/>
+      <text x="335" y="332" text-anchor="middle" font-size="17" fill="#64748b">source sentence length (words) →</text>
+      <text x="46" y="175" text-anchor="middle" font-size="17" fill="#64748b" transform="rotate(-90 46 175)">quality</text>
+      <text x="140" y="322" font-size="17" fill="#94a3b8">10</text>
+      <text x="300" y="322" font-size="17" fill="#94a3b8">30</text>
+      <text x="470" y="322" font-size="17" fill="#94a3b8">50</text>
+      <!-- fixed-vector curve -->
+      <g id="curve-fixed">
+        <path d="M 80 100 C 180 105, 240 120, 310 170 C 380 220, 460 268, 590 285" fill="none" stroke="#dc2626" stroke-width="4"/>
+        <text x="440" y="240" font-size="17" fill="#dc2626" font-weight="700">fixed single vector</text>
+      </g>
+      <g id="cliff-note" class="sp-hide">
+        <line x1="310" y1="60" x2="310" y2="300" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 5"/>
+        <rect x="322" y="66" width="290" height="66" rx="10" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="467" y="93" text-anchor="middle" font-size="17" fill="#b91c1c">past ~30 words, the vector is full:</text>
+        <text x="467" y="117" text-anchor="middle" font-size="17" fill="#b91c1c">details overwrite each other</text>
+      </g>
+      <!-- attention curve -->
+      <g id="curve-attn" class="sp-hide">
+        <path d="M 80 95 C 200 92, 350 95, 590 105" fill="none" stroke="#059669" stroke-width="4"/>
+        <text x="430" y="82" font-size="17" fill="#047857" font-weight="700">with attention (next page)</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-cl-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-cliff svg",
+        caption: "#fig-cl-cap",
+        steps: [
+          { caption: "The 2014 result (Bahdanau et al.'s famous figure, stylized): translation quality vs source length for fixed-vector seq2seq. Short sentences fine; then the slide." },
+          { caption: "The cliff has a mechanical cause, not a mysterious one: a fixed-size vector has fixed capacity. Past ~30 words, new information can only enter by overwriting old.", show: ["#cliff-note"] },
+          { caption: "Same paper, one added mechanism — attention — and the curve goes FLAT. Length stops mattering. That flat green line is what launched the modern era; the mechanism behind it is the next page.", show: ["#curve-attn"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Why 2015-era products felt the way they did</h2>
+
+  <p>
+    If you used translation tools or the first neural chatbots around then, you
+    experienced this page: crisp short sentences, and long inputs that came back
+    generic, hedged, or with the second half of your sentence simply ignored. Products
+    were quietly built around the flaw — split long sentences, keep replies short. The
+    bottleneck wasn't a bug in someone's code; it was the architecture's information
+    budget, visible to end users.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Budget arithmetic: a 1,000-dim fp32 hidden state = <strong>4 KB</strong> to carry a
+      whole sentence. A 50-word German sentence with case markings, clause structure and
+      three named entities simply exceeds 4 KB of faithful summary — while the decoder
+      needs <em>specific</em> words back out, not gist. Compare attention's budget (next
+      page): the decoder keeps access to <strong>all 50 encoder states — 200 KB</strong>
+      — a 50× bigger information channel, priced per-use instead of prepaid.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      You have felt this exact failure in your own systems, one layer up: cram twenty
+      documents into a single summary and ask the LLM to answer from the summary —
+      details are gone; the answer hedges. Your fix was RAG: <em>keep the documents,
+      retrieve the relevant ones at question time</em>. That is precisely the 2014→2015
+      move: stop pre-compressing everything into one blob; give the consumer selective
+      access to the originals. Attention is RAG inside a sentence — a line to keep for
+      the next page, where it becomes literal.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Seq2seq split the world into encoder (reads) and decoder (writes) — vocabulary that
+    survives to this day — but forced everything through one fixed-size vector. The
+    result was a measurable quality cliff with sentence length. The fix must let the
+    decoder <strong>look back at all encoder states, selectively, at every step</strong>.
+    Name that mechanism and you've named the next page.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>What is the seq2seq bottleneck, precisely?</summary>
+      <div><p>In encoder–decoder RNNs, the source sequence's entire meaning must pass through the encoder's final fixed-size hidden state. Information scales with sentence length; the channel doesn't. Long inputs get lossy-compressed — early tokens most of all — and translation quality degrades sharply with length (the Bahdanau 2014 curve). It's an information-capacity limit, not a training deficiency: more data can't widen the pipe.</p></div>
+    </details>
+    <details>
+      <summary>Where do the terms "encoder" and "decoder" come from and why do they persist?</summary>
+      <div><p>From seq2seq translation: encoder maps input sequence → representation; decoder maps representation → output sequence. They persist because the decomposition is architecture-independent: BERT is an encoder used alone (understanding), GPT a decoder used alone (generation), T5/translation models use both with cross-attention (M5.8). Interviewers expect you to map model families onto these two roles fluently.</p></div>
+    </details>
+    <details>
+      <summary>Why does the final RNN state over-represent the end of the input?</summary>
+      <div><p>Recency by construction: each update h_t = f(h_{t−1}, x_t) mixes the new token in while diluting the accumulated summary; a token k steps back has been through k such dilutions. Backward, gradients from the handoff reach recent tokens through short chains and distant ones through long, vanishing ones (M3.4). Both directions bias toward the end — the sentence's beginning is oldest news in the summary.</p></div>
+    </details>
+    <details>
+      <summary>Design question: without knowing about attention, how would you fix the bottleneck?</summary>
+      <div><p>Natural proposals, and their verdicts: bigger hidden state (helps constants, not scaling — capacity still fixed); read the input backwards or bidirectionally (helps which end is fresh, not total capacity); hand the decoder ALL encoder states (right idea! — but it needs a way to select relevant ones per output step); let the decoder query those states with learned relevance weights per step — congratulations, you've derived attention. This "invent it yourself" path is exactly how the question is used in interviews.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

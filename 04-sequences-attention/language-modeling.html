@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Language Modeling &amp; Perplexity — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="04-sequences-attention/language-modeling">
+<main id="content">
+
+  <h1>Language Modeling &amp; Perplexity</h1>
+
+  <p>
+    Before building the transformer, meet the task it was built for. It sounds almost
+    insultingly simple: <strong>given some words, predict the next one.</strong> Hold
+    that thought against everything your chatbot does — answers questions, writes code,
+    apologizes, refuses — because all of it, every capability you've shipped on top of an
+    LLM, is this one task, executed in a loop. This page makes that claim precise, and
+    gives you the field's original metric (perplexity) as a bonus.
+  </p>
+
+  <h2>The task: P(next word | words so far)</h2>
+
+  <p>
+    A <strong>language model</strong> is a probability machine: feed it a prefix, it
+    returns a probability for every word in the vocabulary being next. That's the whole
+    contract. "The capital of France is ___" → Paris 0.95. But the same contract, applied
+    to less obvious prefixes, quietly requires everything:
+  </p>
+
+  <figure class="anim" id="fig-race">
+    <div class="fig-title">Animation · What next-word prediction secretly requires</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-lm-t">
+      <title id="fig-lm-t">Different prefixes demanding grammar, facts, and reasoning</title>
+      <g id="case1">
+        <rect x="30" y="40" width="580" height="64" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="50" y="66" font-size="18" class="mono sv-ink">"She opened the door and ___"</text>
+        <text x="50" y="92" font-size="17" fill="#1d4ed8">→ walked .31 · saw .22 · stepped .15 …&nbsp;&nbsp;<tspan fill="#64748b">needs: grammar</tspan></text>
+      </g>
+      <g id="case2" class="sp-hide">
+        <rect x="30" y="120" width="580" height="64" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="50" y="146" font-size="18" class="mono sv-ink">"The Eiffel Tower is in ___"</text>
+        <text x="50" y="172" font-size="17" fill="#1d4ed8">→ Paris .97&nbsp;&nbsp;<tspan fill="#64748b">needs: facts about the world</tspan></text>
+      </g>
+      <g id="case3" class="sp-hide">
+        <rect x="30" y="200" width="580" height="64" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="50" y="226" font-size="18" class="mono sv-ink">"18 + 24 = ___"</text>
+        <text x="50" y="252" font-size="17" fill="#1d4ed8">→ 42 .91&nbsp;&nbsp;<tspan fill="#64748b">needs: arithmetic</tspan></text>
+      </g>
+      <g id="case4" class="sp-hide">
+        <rect x="30" y="280" width="580" height="64" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="50" y="306" font-size="18" class="mono sv-ink">"The lawyer lost because her alibi ___"</text>
+        <text x="50" y="332" font-size="17" fill="#1d4ed8">→ collapsed .18 · contradicted .14 …&nbsp;&nbsp;<tspan fill="#64748b">needs: reasoning</tspan></text>
+      </g>
+      <g id="punch" class="sp-hide">
+        <rect x="30" y="358" width="580" height="36" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="320" y="382" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">predicting the next word well enough = understanding, operationally</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-lm-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-race svg",
+        caption: "#fig-lm-cap",
+        steps: [
+          { caption: "Some prefixes only demand grammar — many continuations are fine, probability spreads across them." },
+          { caption: "Some demand <b>facts</b>. To put 0.97 on Paris, the model must effectively know geography.", show: ["#case2"] },
+          { caption: "Some demand <b>computation</b>. There's no way to guess 42 from word statistics alone at this confidence.", show: ["#case3"] },
+          { caption: "And some demand <b>reasoning about people and causality</b>. Still 'just' next-word prediction.", show: ["#case4"] },
+          { caption: "This is the deepest bet in modern AI: squeeze the loss on this task hard enough, over enough text, and competence has nowhere to hide. It has to move into the weights.", show: ["#punch"], holdMs: 5800 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Whole sentences: the chain rule of probability</h2>
+
+  <div class="formula">
+    <div class="math">P(sentence) = P(w₁) · P(w₂|w₁) · P(w₃|w₁w₂) · …</div>
+    <div class="plain">
+      <b>In plain words:</b> the probability of a whole sentence is the product of each
+      word's probability given everything before it. So a next-word machine automatically
+      prices <em>entire texts</em> — and can generate them, one conditional at a time.
+      Generation and probability-scoring are the same machinery viewed twice.
+    </div>
+  </div>
+
+  <p>
+    This factorization is why LLMs generate <strong>left to right, one token at a
+    time</strong> — each new token is a fresh draw from P(next | everything so far), then
+    gets appended to the context for the next draw. It's also why they train so well:
+    every position in every sentence of the internet is a labeled example (the label is
+    simply the next word) — self-supervision (M2.2's trick) at maximum scale.
+  </p>
+
+  <h2>Perplexity: the original benchmark</h2>
+
+  <p>
+    How do you score a language model? Cross-entropy (M3.2) per token, averaged. But the
+    field prefers to report its exponential, which has a beautiful reading:
+  </p>
+
+  <div class="formula">
+    <div class="math">perplexity = e^(average cross-entropy per token)</div>
+    <div class="plain">
+      <b>In plain words:</b> the effective number of words the model is
+      <b>hesitating between</b> at each step. Perplexity 1 = clairvoyant. Perplexity 7 =
+      "as unsure as choosing among 7 equally-likely words." Perplexity 50,000 on a 50k
+      vocabulary = knows nothing. Lower is better, and every LLM headline loss number
+      converts directly: perplexity = e^loss.
+    </div>
+  </div>
+
+  <figure class="anim" id="fig-ppl">
+    <div class="fig-title">Animation · Perplexity = width of hesitation</div>
+    <svg viewBox="0 0 640 340" aria-labelledby="fig-ppl-t">
+      <title id="fig-ppl-t">Three models hesitating between different numbers of words</title>
+      <g id="m-bad">
+        <text x="30" y="52" font-size="18" class="sv-ink" font-weight="700">weak model · perplexity ≈ 200</text>
+        <g>
+          <rect x="30" y="66" width="580" height="34" rx="8" fill="#fee2e2" stroke="#fca5a5"/>
+          <text x="320" y="89" text-anchor="middle" font-size="17" fill="#b91c1c">next word: ~200 candidates all look plausible — fog</text>
+        </g>
+      </g>
+      <g id="m-mid" class="sp-hide">
+        <text x="30" y="152" font-size="18" class="sv-ink" font-weight="700">decent model · perplexity ≈ 20</text>
+        <rect x="30" y="166" width="290" height="34" rx="8" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="175" y="189" text-anchor="middle" font-size="17" fill="#92400e">~20 serious candidates</text>
+      </g>
+      <g id="m-good" class="sp-hide">
+        <text x="30" y="252" font-size="18" class="sv-ink" font-weight="700">strong model · perplexity ≈ 7</text>
+        <rect x="30" y="266" width="120" height="34" rx="8" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="90" y="289" text-anchor="middle" font-size="17" fill="#047857">~7 candidates</text>
+      </g>
+      <g id="lbl-conv" class="sp-hide">
+        <rect x="240" y="252" width="380" height="62" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="430" y="278" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">loss 2.0 ⇄ perplexity e² ≈ 7.4</text>
+        <text x="430" y="302" text-anchor="middle" font-size="17" fill="#1d4ed8">one exp() between the two numbers</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-ppl-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-ppl svg",
+        caption: "#fig-ppl-cap",
+        steps: [
+          { caption: "A weak model: at each position, ~200 words feel equally plausible to it. Its text meanders; its guesses are fog." },
+          { caption: "A decent model narrows the field to ~20 — grammar and topic are handled; specifics still fuzzy.", show: ["#m-mid"] },
+          { caption: "A strong model hesitates between ~7 — often fewer where context pins things down.", show: ["#m-good"] },
+          { caption: "Conversion habit worth keeping: see a reported loss, exponentiate it, read it as hesitation-width. GPT-2's ~29 → modern frontier models' ~4–8 on comparable text: a decade of progress in one number.", show: ["#lbl-conv"], holdMs: 5800 }
+        ]
+      });
+    });
+  </script>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      GPT-2 (2019) reached perplexity ≈ <strong>29</strong> on the WikiText-103
+      benchmark; earlier LSTM-era models sat around <strong>40–60</strong>; modern LLMs
+      score single digits on comparable text. And a human calibration: people asked to
+      guess next words behave like a model with perplexity roughly <strong>10–15</strong>
+      on typical prose — frontier LLMs are now superhuman at this specific game, which
+      is exactly why their text feels fluent. (Fluent ≠ true — that gap is M11.6.)
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Every product behavior you've built on LLMs is this page wearing a costume:
+      <strong>chat</strong> = predict next tokens after a transcript that ends with
+      "Assistant:"; <strong>code completion</strong> in Cursor = next tokens after your
+      cursor; <strong>your RAG answers</strong> = next tokens after retrieved chunks +
+      question; even <strong>tool calling</strong> (M12.4) = next tokens that happen to
+      be JSON. There is no second mechanism. One task, worn four ways — and when the
+      streaming cursor blinks in your chatbot UI, that's the chain rule factorization,
+      live.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: watch a real LM hesitate</div>
+<pre><code># pip install transformers torch
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tok = AutoTokenizer.from_pretrained("gpt2")
+lm  = AutoModelForCausalLM.from_pretrained("gpt2")
+
+def peek(prefix, k=6):
+    ids = tok(prefix, return_tensors="pt").input_ids
+    with torch.no_grad():
+        logits = lm(ids).logits[0, -1]          # scores for the NEXT token
+    probs = torch.softmax(logits, dim=-1)       # M3.2, live
+    top = torch.topk(probs, k)
+    print(f"\n{prefix!r}")
+    for p, i in zip(top.values, top.indices):
+        print(f"  {tok.decode(i)!r:>14}  {p:.3f}")
+
+peek("The capital of France is")
+peek("She opened the door and")
+peek("18 + 24 =")                # watch 2019-era GPT-2 struggle with arithmetic!
+</code></pre>
+    <p>
+      Three prefixes, three shapes of hesitation — sharp for facts, wide for open prose,
+      and confused for arithmetic (GPT-2 predates the scale where arithmetic emerges,
+      M7.4 tells that story). You're inspecting the raw probability machine your whole
+      stack is built on.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    A language model does exactly one thing: <strong>assign probabilities to the next
+    token</strong>. Sentences follow by the chain rule; generation is repeated sampling;
+    training data is free at internet scale; and perplexity — e^loss — reads as "how
+    many words is it torn between." Everything an LLM appears to do is this task,
+    compounded.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>What is a language model, strictly speaking?</summary>
+      <div><p>A model of the probability distribution over token sequences, almost always factorized autoregressively: P(w₁…wₙ) = Π P(wᵢ | w₁…wᵢ₋₁). It's trained to predict each next token given its prefix. Everything else — chat, code generation, summarization — is this distribution being sampled under different prompts.</p></div>
+    </details>
+    <details>
+      <summary>Define perplexity and interpret a value of 20.</summary>
+      <div><p>Perplexity = exp(average per-token cross-entropy) — the geometric-mean inverse probability of the data. Value 20 means the model is, on average, as uncertain as if choosing uniformly among 20 candidate tokens per position. Lower is better; it's dataset-dependent (compare models only on the same text with the same tokenizer — a subtle but classic gotcha, since a different tokenizer changes what "per token" means).</p></div>
+    </details>
+    <details>
+      <summary>Why is next-token prediction such an effective pretraining task?</summary>
+      <div><p>Three compounding reasons: labels are free (the next token IS the label — self-supervision at web scale); the task is dense (every token of every document is a training example); and it's a "universal demand" — predicting well across all text requires grammar, facts, style, and reasoning, so loss minimization forces broad competence into the weights. It converts unlimited raw text into unlimited supervised signal.</p></div>
+    </details>
+    <details>
+      <summary>Is an LLM "just autocomplete"? Give the sophisticated version of both sides.</summary>
+      <div><p>Mechanically yes: it emits next-token distributions, nothing else. But the dismissive reading fails because doing that task at very low loss provably requires internal computation — world knowledge, in-context pattern induction, multi-step composition — and instruction tuning (M8.3) shapes the distribution toward helpful continuations. The honest framing: the <em>interface</em> is autocomplete; the <em>capabilities needed to do it well</em> are not trivial. Interviewers use this to test whether you can hold both truths.</p></div>
+    </details>
+    <details>
+      <summary>Why do LLMs generate token-by-token instead of emitting a whole answer at once?</summary>
+      <div><p>The autoregressive factorization: each token's distribution is conditioned on all previous tokens, including just-generated ones — so token t must exist before token t+1 can be predicted. This is why APIs stream, why long outputs cost proportionally more, and why latency splits into prompt-processing vs per-token generation (mechanics in M5.7, economics in M7.5).</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

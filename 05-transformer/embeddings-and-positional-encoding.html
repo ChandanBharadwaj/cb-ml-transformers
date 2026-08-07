@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Embeddings &amp; Positional Encoding — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="05-transformer/embeddings-and-positional-encoding">
+<main id="content">
+
+  <h1>Embeddings &amp; Positional Encoding</h1>
+
+  <p>
+    Token IDs are just index numbers — ID 4937 means nothing by itself. Before attention
+    can work, each ID becomes a vector (old friend: the embedding table), and then
+    something subtle must happen: <strong>order has to be injected</strong>, because
+    attention — you'll see why — is natively blind to it. This page covers both moves,
+    plus the modern position trick (RoPE) that made 128k-token contexts possible.
+  </p>
+
+  <h2>The embedding table: word2vec's ghost in every transformer</h2>
+
+  <p>
+    Step one is a lookup: a matrix of shape vocab × d (MiniLM: 30,522 × 384), where
+    row <em>i</em> is token <em>i</em>'s starting vector. Structurally identical to
+    word2vec's V matrix (M2.2) — but with two upgrades: it's trained <em>jointly</em>
+    with the whole network for the end task, and its outputs are only the
+    <strong>starting point</strong> — static, context-free vectors that the attention
+    layers above will transform into contextual ones (fixing M2.4's bank problem is
+    literally the job of the rest of this module).
+  </p>
+
+  <h2>The problem: attention is a bag, not a sequence</h2>
+
+  <p>
+    Here's the subtlety. Attention (M4.4) scores pairs of vectors with dot products and
+    blends by weight. Nothing in that arithmetic knows <em>where</em> a vector sat in
+    the sentence — shuffle the inputs and you get the same scores, the same blends,
+    shuffled. Without help, a transformer sees word soup:
+  </p>
+
+  <figure class="anim" id="fig-bag">
+    <div class="fig-title">Animation · Why order must be injected</div>
+    <svg viewBox="0 0 640 380" aria-labelledby="fig-bag-t">
+      <title id="fig-bag-t">Two different sentences producing the same bag of vectors</title>
+      <g id="s1" class="mono">
+        <rect x="30" y="40" width="580" height="48" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="320" y="71" text-anchor="middle" font-size="18" fill="#1d4ed8">dog bites man</text>
+      </g>
+      <g id="s2" class="mono">
+        <rect x="30" y="100" width="580" height="48" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="320" y="131" text-anchor="middle" font-size="18" fill="#b45309">man bites dog</text>
+      </g>
+      <g id="bag" class="sp-hide">
+        <path d="M 200 156 L 320 200 M 440 156 L 320 200" stroke="#94a3b8" stroke-width="2.5" fill="none"/>
+        <ellipse cx="320" cy="248" rx="150" ry="52" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2.5"/>
+        <text x="320" y="240" text-anchor="middle" font-size="18" class="mono sv-ink">{ dog, bites, man }</text>
+        <text x="320" y="266" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">same bag — attention can't tell them apart!</text>
+      </g>
+      <g id="fix" class="sp-hide">
+        <rect x="30" y="320" width="580" height="46" rx="10" fill="#d1fae5" stroke="#6ee7b7"/>
+        <text x="320" y="350" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">fix: stamp each vector with its position BEFORE attention sees it</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-bag-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-bag svg",
+        caption: "#fig-bag-cap",
+        steps: [
+          { caption: "Two sentences. One is Tuesday; the other is a headline. The difference is pure word order." },
+          { caption: "Strip order — which is what raw attention does, since dot products don't care about sequence position — and both collapse to the identical bag of three vectors.", show: ["#bag"] },
+          { caption: "So position must be added to the DATA itself: each token's vector gets stamped with where-it-sits, making 'dog-at-position-1' and 'dog-at-position-3' different vectors. How to stamp well is the rest of this page.", show: ["#fix"], holdMs: 5600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Stamp #1: sinusoidal waves (the 2017 original)</h2>
+
+  <p>
+    The original transformer added a <strong>position vector</strong> to each token
+    embedding: position p's vector is built from sines and cosines of p at many
+    frequencies — dimension pairs oscillating fast, medium, slow. Think of it as a
+    <strong>binary-counter made smooth</strong>: fast dimensions distinguish neighbors;
+    slow ones distinguish sentence regions; together, every position gets a unique,
+    consistent fingerprint — and (the elegant part) the pattern for position p+k relates
+    to p by a fixed rotation, so <em>relative</em> offsets are learnable. No parameters,
+    works for any length.
+  </p>
+
+  <figure class="anim" id="fig-waves">
+    <div class="fig-title">Animation · Position as a chord of waves</div>
+    <svg viewBox="0 0 640 360" aria-labelledby="fig-wv-t">
+      <title id="fig-wv-t">Sinusoidal position fingerprints at several frequencies</title>
+      <!-- axes -->
+      <line x1="50" y1="60" x2="50" y2="310" stroke="#cbd5e1" stroke-width="2"/>
+      <line x1="50" y1="310" x2="610" y2="310" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="330" y="340" text-anchor="middle" font-size="17" fill="#64748b">position in sequence →</text>
+      <!-- fast wave -->
+      <g id="w-fast">
+        <path d="M 50 100 Q 65 70 80 100 T 110 100 T 140 100 T 170 100 T 200 100 T 230 100 T 260 100 T 290 100 T 320 100 T 350 100 T 380 100 T 410 100 T 440 100 T 470 100 T 500 100 T 530 100 T 560 100 T 590 100" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+        <text x="600" y="95" text-anchor="end" font-size="17" fill="#1d4ed8">dim 0: fast — tells neighbors apart</text>
+      </g>
+      <g id="w-mid" class="sp-hide">
+        <path d="M 50 180 Q 95 130 140 180 T 320 180 T 500 180 T 610 165" fill="none" stroke="#d97706" stroke-width="2.5"/>
+        <text x="600" y="160 " text-anchor="end" font-size="17" fill="#b45309">dim 100: medium — clause-scale</text>
+      </g>
+      <g id="w-slow" class="sp-hide">
+        <path d="M 50 265 C 230 230, 430 250, 610 285" fill="none" stroke="#059669" stroke-width="2.5"/>
+        <text x="600" y="245" text-anchor="end" font-size="17" fill="#047857">dim 300: slow — start vs end of doc</text>
+      </g>
+      <g id="stamp" class="sp-hide">
+        <line x1="260" y1="60" x2="260" y2="310" stroke="#dc2626" stroke-width="2.5" stroke-dasharray="6 5"/>
+        <circle cx="260" cy="100" r="7" fill="#2563eb"/><circle cx="260" cy="163" r="7" fill="#d97706"/><circle cx="260" cy="252" r="7" fill="#059669"/>
+        <rect x="278" y="118" width="230" height="40" rx="9" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="393" y="144" text-anchor="middle" font-size="17" fill="#b91c1c">position 7's unique fingerprint</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-wv-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-waves svg",
+        caption: "#fig-wv-cap",
+        steps: [
+          { caption: "One dimension of the position vector oscillates fast along the sequence — adjacent positions get visibly different values." },
+          { caption: "Another oscillates slower — same value for neighbors, different across a clause.", show: ["#w-mid"] },
+          { caption: "And another drifts slowly — distinguishing the document's start from its end. Hundreds of frequencies run in parallel.", show: ["#w-slow"] },
+          { caption: "Read vertically at any position: the values across all frequencies form a unique fingerprint — added onto the token's embedding before attention. 'dog' at position 1 vs 3 are now genuinely different vectors.", show: ["#stamp"], holdMs: 5800 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Stamp #2 and #3: learned positions, then RoPE</h2>
+
+  <p>
+    <strong>Learned positions</strong> (BERT, MiniLM, GPT-2): skip the trigonometry —
+    make a second embedding table, one trainable row per position, and add row p to
+    every token at position p. Simpler, works slightly better in-range, but has a hard
+    edge: only as many rows as you trained (512 for BERT/MiniLM, 1024 for GPT-2).
+    Position 513 <em>does not exist</em>. That's the literal origin of your chunker's
+    512-token limit.
+  </p>
+  <p>
+    <strong>RoPE — rotary position embedding</strong> (Llama, Qwen, most modern LLMs)
+    moves position out of the token vector entirely: instead of adding a stamp, it
+    <strong>rotates each query and key vector by an angle proportional to its
+    position</strong> (at many frequencies, like the sinusoids). The beautiful
+    consequence comes from dot-product geometry (M1.2): rotating both vectors makes
+    their dot product depend only on the <em>angle difference</em> — i.e., attention
+    scores depend on <strong>relative distance</strong> between tokens, not absolute
+    slots. "Three tokens apart" behaves identically at position 10 and position 10,000.
+    That relative-ness is what lets context windows stretch (with frequency rescaling
+    tricks) to 128k+ — the full story lands in M11.2.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      MiniLM's config: <code>"max_position_embeddings": 512</code> — a learned 512 × 384
+      table (196,608 parameters), and the reason your RAG chunks cap at 512 tokens:
+      row 513 was never created. GPT-2: 1024 learned positions. Llama-3 with RoPE:
+      <strong>zero position parameters</strong>, trained at 8k and extended to 128k via
+      rotation-frequency rescaling. Also countable now: MiniLM's full input layer =
+      token table (11.72M) + position table (0.20M) + segment table (0.0008M) ≈
+      <strong>11.9M parameters — 52% of the entire model</strong>, spent before any
+      attention runs.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Three mysteries from your production life, closed: (1) the 512-token truncation
+      warning from sentence-transformers = the position table's last row; (2) "context
+      window: 128k" in a model card = how far its position scheme (usually RoPE) was
+      trained/extended to reach; (3) models degrading on very long inputs despite
+      big windows = positions those rotation frequencies rarely saw in training
+      (M11.2's "lost in the middle"). One design choice — how to stamp order —
+      surfaces in your API errors, your chunker config, and your model choice.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: see the fingerprints and the 512 wall</div>
+<pre><code>import numpy as np
+import matplotlib.pyplot as plt
+
+def sinusoidal(n_pos, d):
+    P = np.zeros((n_pos, d))
+    pos = np.arange(n_pos)[:, None]
+    i = np.arange(0, d, 2)[None, :]
+    angle = pos / (10000 ** (i / d))
+    P[:, 0::2], P[:, 1::2] = np.sin(angle), np.cos(angle)
+    return P
+
+P = sinusoidal(100, 128)
+plt.figure(figsize=(9, 4))
+plt.imshow(P, aspect="auto", cmap="RdBu")     # the famous stripe plot
+plt.xlabel("embedding dimension"); plt.ylabel("position")
+plt.title("every row = one position's unique fingerprint")
+plt.colorbar(); plt.show()
+
+# and the 512 wall, live:
+from transformers import AutoTokenizer, AutoModel
+tok = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+print(tok.model_max_length)                    # → 512. Now you know exactly why.
+</code></pre>
+    <p>
+      In the stripe plot, notice fast stripes on the left dimensions, slow on the right —
+      the animation's waves as an image. Every position's row is unique; nearby rows are
+      similar. That's all "positional encoding" ever was.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Input to a transformer = <strong>embedding-table lookup + position stamp</strong>.
+    The stamp exists because attention's math is order-blind; the three stamp designs —
+    sinusoidal waves (parameter-free), learned rows (simple, hard length limit — your
+    512), and RoPE rotations (relative distances, long-context capable) — explain
+    every context-length number you've ever read in a model card.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Why do transformers need positional encoding when RNNs didn't?</summary>
+      <div><p>RNNs consume tokens sequentially — order is implicit in processing time. Attention processes all positions simultaneously via dot products that are permutation-invariant: shuffle the inputs and outputs shuffle identically, so "dog bites man" ≡ "man bites dog". Position must therefore be injected into the representations themselves (added stamps or rotations) before attention can distinguish orderings.</p></div>
+    </details>
+    <details>
+      <summary>Compare sinusoidal, learned, and rotary (RoPE) positional encodings.</summary>
+      <div><p>Sinusoidal: fixed multi-frequency wave fingerprints added to embeddings — parameter-free, defined for any length, relative offsets expressible via rotations. Learned: a trainable per-position table added to embeddings — flexible, slightly better in-distribution, but hard-capped at trained length (BERT/MiniLM's 512). RoPE: rotate Q and K by position-proportional angles so attention scores depend only on relative distance — no added parameters, best extrapolation, and the basis of modern long-context scaling; now the de-facto standard in LLMs.</p></div>
+    </details>
+    <details>
+      <summary>Why does RoPE make attention depend on relative rather than absolute position?</summary>
+      <div><p>A dot product between two vectors rotated by angles θ_m and θ_n depends only on the difference θ_m − θ_n (rotations preserve dot products up to the relative angle). Since RoPE sets each token's rotation proportional to its index, q·k becomes a function of (m − n) — the token gap — not of m and n individually. Linguistically that's the right prior: "adjective two tokens before its noun" shouldn't care whether it happens at position 5 or 5,000.</p></div>
+    </details>
+    <details>
+      <summary>The embedding table is over half of MiniLM's parameters. Is that typical? What changes at LLM scale?</summary>
+      <div><p>Typical for small models: vocab × d (30k × 384) is fixed-ish while layers are thin. At LLM scale the ratio inverts — Llama-3-8B's table is 128k × 4096 ≈ 0.5B, only ~6% of 8B, because layer parameters grow with d² and depth while the table grows with d. Corollaries: small models are "mostly dictionary" (why distillation targets layers, M9.4), and vocabulary choices materially affect small-model size. Many models also tie input/output embedding matrices to save the duplicate.</p></div>
+    </details>
+    <details>
+      <summary>Can you run a 512-position model on a 2,000-token document? What actually happens?</summary>
+      <div><p>Not directly: with learned positions there's no row 513 — the library truncates (silently or with a warning) or errors. Workarounds: chunk the document (what RAG pipelines do — with overlap so boundaries don't cut context), use a long-context model, or (research-grade) extend positions by interpolation plus fine-tuning. The practical answer interviewers want: know your model's limit, chunk deliberately, and understand truncation is data loss, not compression.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

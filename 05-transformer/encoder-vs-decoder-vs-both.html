@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Encoder vs Decoder vs Both — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="05-transformer/encoder-vs-decoder-vs-both">
+<main id="content">
+
+  <h1>Encoder vs Decoder vs Both</h1>
+
+  <p>
+    Module capstone. You've built the encoder block and the causal mask — every
+    transformer in existence is one of <strong>three arrangements</strong> of what you
+    now know. This page is the field guide: the three silhouettes, the one mechanism
+    you haven't met yet (cross-attention), how to pick by task — and why the LLM era
+    quietly standardized on just one of the three.
+  </p>
+
+  <h2>The three silhouettes</h2>
+
+  <figure class="anim" id="fig-three">
+    <div class="fig-title">Animation · Three architectures, three information flows</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-3-t">
+      <title id="fig-3-t">BERT GPT and T5 with their attention directions</title>
+      <!-- BERT -->
+      <g id="arch-bert">
+        <rect x="30" y="60" width="180" height="240" rx="14" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+        <text x="120" y="90" text-anchor="middle" font-size="18" fill="#1d4ed8" font-weight="700">ENCODER-ONLY</text>
+        <text x="120" y="112" text-anchor="middle" font-size="17" fill="#1d4ed8">BERT · MiniLM · GLiNER</text>
+        <g class="mono">
+          <text x="70" y="200" text-anchor="middle" font-size="17" fill="#1e3a8a">A</text>
+          <text x="120" y="200" text-anchor="middle" font-size="17" fill="#1e3a8a">B</text>
+          <text x="170" y="200" text-anchor="middle" font-size="17" fill="#1e3a8a">C</text>
+        </g>
+        <path d="M 80 188 L 108 188 M 132 188 L 160 188" stroke="#2563eb" stroke-width="2.5" marker-end="url(#tv-b)" fill="none"/>
+        <path d="M 160 210 L 132 210 M 108 210 L 80 210" stroke="#2563eb" stroke-width="2.5" marker-end="url(#tv-b)" fill="none"/>
+        <text x="120" y="250" text-anchor="middle" font-size="17" fill="#1d4ed8">sees BOTH ways</text>
+        <text x="120" y="282" text-anchor="middle" font-size="17" fill="#64748b">out: rich vectors</text>
+      </g>
+      <!-- GPT -->
+      <g id="arch-gpt" class="sp-hide">
+        <rect x="230" y="60" width="180" height="240" rx="14" fill="#fef3c7" stroke="#fcd34d" stroke-width="2"/>
+        <text x="320" y="90" text-anchor="middle" font-size="18" fill="#b45309" font-weight="700">DECODER-ONLY</text>
+        <text x="320" y="112" text-anchor="middle" font-size="17" fill="#b45309">GPT · Llama · Claude</text>
+        <g class="mono">
+          <text x="270" y="200" text-anchor="middle" font-size="17" fill="#92400e">A</text>
+          <text x="320" y="200" text-anchor="middle" font-size="17" fill="#92400e">B</text>
+          <text x="370" y="200" text-anchor="middle" font-size="17" fill="#92400e">C</text>
+        </g>
+        <path d="M 308 195 L 282 195 M 358 195 L 332 195" stroke="#d97706" stroke-width="2.5" marker-end="url(#tv-o)" fill="none"/>
+        <path d="M 355 215 C 335 230, 300 230, 282 215" stroke="#d97706" stroke-width="2.5" marker-end="url(#tv-o)" fill="none"/>
+        <text x="320" y="250" text-anchor="middle" font-size="17" fill="#b45309">sees LEFT only</text>
+        <text x="320" y="282" text-anchor="middle" font-size="17" fill="#64748b">out: next token</text>
+      </g>
+      <!-- T5 -->
+      <g id="arch-t5" class="sp-hide">
+        <rect x="430" y="60" width="180" height="240" rx="14" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+        <text x="520" y="90" text-anchor="middle" font-size="18" fill="#047857" font-weight="700">ENC + DEC</text>
+        <text x="520" y="112" text-anchor="middle" font-size="17" fill="#047857">T5 · translation · Whisper</text>
+        <rect x="450" y="140" width="140" height="52" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="520" y="172" text-anchor="middle" font-size="17" fill="#1d4ed8">encoder reads input</text>
+        <rect x="450" y="230" width="140" height="52" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+        <text x="520" y="256" text-anchor="middle" font-size="17" fill="#b45309">decoder writes output,</text>
+        <text x="520" y="274" text-anchor="middle" font-size="17" fill="#b45309">peeking at encoder ↑</text>
+        <path d="M 520 196 L 520 224" stroke="#059669" stroke-width="3.5" marker-end="url(#tv-g)"/>
+      </g>
+      <g id="lbl-cross" class="sp-hide">
+        <rect x="90" y="330" width="460" height="66" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="356" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">the green arrow = cross-attention:</text>
+        <text x="320" y="382" text-anchor="middle" font-size="17" fill="#64748b">decoder supplies Q · encoder's output supplies K and V — 2015's attention (M4.4), formalized</text>
+      </g>
+      <defs>
+        <marker id="tv-b" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#2563eb"/></marker>
+        <marker id="tv-o" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#d97706"/></marker>
+        <marker id="tv-g" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#059669"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-3-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-three svg",
+        caption: "#fig-3-cap",
+        steps: [
+          { caption: "Silhouette 1 — encoder-only: your 5.6 stack, unmasked. Every token sees the whole input, both directions. Output: one rich contextual vector per token. This is BERT, MiniLM, GLiNER's backbone." },
+          { caption: "Silhouette 2 — decoder-only: same stack + the 5.7 causal mask. Left-context only, output is next-token probabilities. This is every chat LLM you've ever called.", show: ["#arch-gpt"] },
+          { caption: "Silhouette 3 — both: an encoder reads the input fully; a decoder generates the output while attending INTO the encoder's vectors. Translation, summarization-specialists, Whisper (audio in → text out).", show: ["#arch-t5"] },
+          { caption: "That green arrow is the one new mechanism: <b>cross-attention</b> — attention where Q comes from the decoder but K and V come from the encoder's output. It IS M4.4's original attention, given its proper name. Nothing else on this page is new.", show: ["#lbl-cross"], holdMs: 6400 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Choosing by task: the decision table</h2>
+
+  <table>
+    <tr><th>You need…</th><th>Pick</th><th>Why</th></tr>
+    <tr><td>embeddings, similarity, classification, NER</td><td><strong>encoder</strong></td><td>bidirectional context makes the richest per-token/per-text vectors; no generation needed</td></tr>
+    <tr><td>chat, code, any open-ended generation</td><td><strong>decoder</strong></td><td>generation requires the causal factorization (M4.1); left-only context is the price</td></tr>
+    <tr><td>faithful input→output transforms (translation, speech-to-text)</td><td><strong>enc-dec</strong></td><td>encoder gives the full input bidirectional treatment; decoder generates while consulting it via cross-attention</td></tr>
+  </table>
+
+  <p>
+    Your stack, sorted in one breath: <strong>all-MiniLM</strong> = encoder (you want
+    vectors, not text). <strong>GLiNER</strong> = encoder (labels spans, generates
+    nothing). <strong>Your chatbot's LLM</strong> = decoder. A translation service =
+    enc-dec. The sorting rule is one question: <em>is the output a vector, a label, or
+    new text?</em>
+  </p>
+
+  <h2>Why decoder-only won the LLM era</h2>
+
+  <p>
+    In 2019 all three families looked viable; by 2023, frontier models were uniformly
+    decoder-only. Four compounding reasons: <strong>(1) Task universality</strong> —
+    with everything framed as text-continuation, one architecture handles translation,
+    QA, code, and chat as prompts, no per-task heads. <strong>(2) Training
+    simplicity</strong> — one objective (next token) on raw text; no masking-rate
+    choices, no input/output pairing needed. <strong>(3) In-context learning</strong> —
+    the emergent few-shot behavior (M6.3) showed up most strongly in decoders, replacing
+    fine-tuning with prompting for many tasks. <strong>(4) Serving economics</strong> —
+    the KV cache (M11.2) makes appending-to-a-conversation cheap for decoders, exactly
+    the access pattern of chat. Encoder-decoder survives where inputs deserve
+    first-class bidirectional treatment (Whisper, translation); encoders survive
+    wherever vectors are the product — i.e., your embedding stack.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      The family tree's split, by the numbers you now read fluently: BERT-base (2018,
+      encoder): d=768, L=12 → 110M. GPT-2 (2019, decoder): d=768, L=12 → 117M —
+      <em>nearly identical bodies</em>, one mask apart. T5-base (2019, enc-dec): 220M ≈
+      both bodies stapled together. Then the fork: encoders stopped scaling
+      (BERT-large, 340M, remains the family's practical ceiling), while decoders ran to
+      175B (GPT-3) and beyond — the "one task, infinite data" objective is what kept
+      paying at scale.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      The map page's promise is now redeemable: <em>both black boxes are the same
+      machine.</em> MiniLM = 5.6's block × 6, unmasked, width 384. Your chat LLM =
+      the same block × ~30–100, masked, width 4096+. One reads and emits geometry;
+      one writes and emits tokens. Everything from here on — pretraining objectives
+      (M6), compute (M7), fine-tuning (M8), MiniLM's training (M9), GLiNER (M10) —
+      is about how these three silhouettes get <em>filled with knowledge</em>, not
+      about new machinery.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build (module capstone): watch real attention heads at work</div>
+<pre><code># pip install bertviz transformers torch
+from transformers import AutoTokenizer, AutoModel
+from bertviz import head_view
+
+name = "bert-base-uncased"
+tok = AutoTokenizer.from_pretrained(name)
+model = AutoModel.from_pretrained(name, output_attentions=True)
+
+sentence = "The cat chased the mice because it was hungry"
+inputs = tok(sentence, return_tensors="pt")
+attn = model(**inputs).attentions          # 12 layers × 12 heads of REAL weights
+
+head_view(attn, tok.convert_ids_to_tokens(inputs.input_ids[0]))
+# (opens an interactive view — run in Jupyter/Colab)
+</code></pre>
+    <p>
+      Your scavenger hunt, from 5.4's theory: ① find a <strong>previous-token head</strong>
+      (clean diagonal — usually layer 2–4); ② find the head where <strong>"it" attends
+      to "cat"</strong> — a coreference specialist, typically mid-to-late layers;
+      ③ find a boring diffuse head and appreciate that redundancy is normal.
+      Then swap in your own ambiguous sentence ("the bank near the river…") and watch
+      5.3's disambiguation happen in a production model. This closes Module 5: from
+      arrows in 2-D space to reading a real transformer's mind.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Three arrangements of one block: <strong>encoder</strong> (bidirectional → vectors:
+    BERT/MiniLM/GLiNER), <strong>decoder</strong> (masked → generation: every chat LLM),
+    <strong>encoder-decoder</strong> (both + cross-attention: translation/Whisper).
+    Cross-attention = Q from the writer, K/V from the reader — 2015's attention with its
+    formal name. Decoder-only won the LLM era on universality, training simplicity,
+    in-context learning and serving economics. The transformer is now, fully, yours.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Encoder-only vs decoder-only vs encoder-decoder — when do you use each?</summary>
+      <div><p>Encoder-only (BERT/MiniLM): bidirectional attention, outputs contextual vectors — embeddings, classification, NER, retrieval. Decoder-only (GPT/Llama): causal attention, outputs next-token distributions — all open-ended generation and chat. Encoder-decoder (T5/Whisper/translation): encoder digests the input bidirectionally, decoder generates while cross-attending to it — best when output must faithfully transform a fully-understood input. Decision heuristic: is the product a vector, or new text, or text-conditioned-on-fully-read-input?</p></div>
+    </details>
+    <details>
+      <summary>What exactly is cross-attention and where does it appear?</summary>
+      <div><p>Attention where queries come from one sequence (the decoder's states) and keys/values from another (the encoder's outputs): softmax(Q_dec · K_encᵀ/√d) · V_enc. It sits as a third sublayer in each encoder-decoder decoder block, between self-attention and the FFN. It's exactly Bahdanau-2015 attention formalized — and the same pattern reappears in multimodal models (text queries attending over image-encoder outputs).</p></div>
+    </details>
+    <details>
+      <summary>Why did decoder-only become the standard for large models?</summary>
+      <div><p>(1) Universality: every task expressible as text-continuation — one model, no task heads. (2) The simplest, densest objective: next-token prediction over raw text, no masking-rate or pairing decisions. (3) In-context learning emerged strongest in this family, letting prompting replace fine-tuning. (4) Serving: causal structure + KV caching matches chat's append-only access pattern perfectly. Encoders didn't die — they specialized into the embedding/retrieval layer (your MiniLM), which is arguably the second-most-deployed transformer type on earth.</p></div>
+    </details>
+    <details>
+      <summary>Could you use a decoder-only LLM to produce embeddings? Trade-offs?</summary>
+      <div><p>Yes — take a hidden state (e.g., last token's, or mean-pooled) — and recent LLM-based embedders do exactly this competitively at large scale. Trade-offs: causal attention means early tokens never see later ones (mitigated by tricks like repeating the text or bidirectional-finetuning); cost is much higher than a 22M encoder; and off-the-shelf decoder states aren't trained for similarity geometry (need contrastive fine-tuning, M9.3). For most retrieval workloads, dedicated small encoders still win on cost-performance — which is why MiniLM survives in your stack next to a frontier LLM.</p></div>
+    </details>
+    <details>
+      <summary>BERT can see both directions — why can't it generate text well?</summary>
+      <div><p>Generation requires the autoregressive factorization P(next | prefix); BERT was trained to fill isolated masked slots given both sides — a denoising objective, not a sequential one. It has no principled way to produce token t+1 conditioned only on a growing prefix, and iterative mask-filling generation is slow and incoherent in practice. Objective determines capability: bidirectional training buys understanding at the price of generation (and vice versa for GPT — which is why both families exist).</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

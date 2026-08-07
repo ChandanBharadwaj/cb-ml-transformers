@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Encoder Block &amp; Stacking — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="05-transformer/the-encoder-block-and-stacking">
+<main id="content">
+
+  <h1>The Encoder Block &amp; Stacking</h1>
+
+  <p>
+    Assembly day. Every part is on the bench — attention (5.3–5.4), FFN, residuals,
+    LayerNorm (5.5) — and this page snaps them into <strong>the block</strong>, the unit
+    that repeats to make every transformer you've ever used. Then we stack it six high
+    and read MiniLM's actual config file line by line. By the end, "MiniLM-L6" stops
+    being a product name and becomes a diagram you can draw from memory.
+  </p>
+
+  <h2>The block: two moves, two wrappers</h2>
+
+  <figure class="anim" id="fig-block">
+    <div class="fig-title">Animation · One encoder block assembles itself</div>
+    <svg viewBox="0 0 640 420" aria-labelledby="fig-blk-t">
+      <title id="fig-blk-t">Encoder block assembled from attention, FFN, residuals and LayerNorm</title>
+      <!-- input tokens -->
+      <g id="in-toks">
+        <text x="320" y="404" text-anchor="middle" font-size="17" fill="#64748b">token vectors enter from below ↑</text>
+        <g class="mono">
+          <rect x="200" y="356" width="70" height="30" rx="7" fill="#f1f5f9" stroke="#cbd5e1"/><text x="235" y="377" text-anchor="middle" font-size="17" class="sv-ink">the</text>
+          <rect x="285" y="356" width="70" height="30" rx="7" fill="#f1f5f9" stroke="#cbd5e1"/><text x="320" y="377" text-anchor="middle" font-size="17" class="sv-ink">bank</text>
+          <rect x="370" y="356" width="70" height="30" rx="7" fill="#f1f5f9" stroke="#cbd5e1"/><text x="405" y="377" text-anchor="middle" font-size="17" class="sv-ink">…</text>
+        </g>
+      </g>
+      <!-- LN1 + attention -->
+      <g id="stage1" class="sp-hide">
+        <rect x="150" y="290" width="340" height="52" rx="12" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+        <text x="320" y="315" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">LayerNorm → multi-head attention</text>
+        <text x="320" y="334" text-anchor="middle" font-size="17" fill="#1d4ed8">tokens exchange information</text>
+      </g>
+      <g id="res1" class="sp-hide">
+        <path d="M 140 350 C 90 330, 90 300, 140 282" fill="none" stroke="#059669" stroke-width="4" marker-end="url(#bl-g)"/>
+        <text x="72" y="320" font-size="17" fill="#047857" font-weight="700">+ x</text>
+      </g>
+      <!-- LN2 + FFN -->
+      <g id="stage2" class="sp-hide">
+        <rect x="150" y="196" width="340" height="52" rx="12" fill="#fef3c7" stroke="#fcd34d" stroke-width="2"/>
+        <text x="320" y="221" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">LayerNorm → FFN (expand·GELU·compress)</text>
+        <text x="320" y="240" text-anchor="middle" font-size="17" fill="#b45309">each token thinks alone</text>
+      </g>
+      <g id="res2" class="sp-hide">
+        <path d="M 140 258 C 90 240, 90 210, 140 190" fill="none" stroke="#059669" stroke-width="4" marker-end="url(#bl-g)"/>
+        <text x="72" y="228" font-size="17" fill="#047857" font-weight="700">+ x</text>
+      </g>
+      <!-- output + box -->
+      <g id="blk-done" class="sp-hide">
+        <rect x="130" y="164" width="380" height="234" rx="16" fill="none" stroke="#2563eb" stroke-width="3" stroke-dasharray="9 6"/>
+        <text x="540" y="286" font-size="17" fill="#1d4ed8" font-weight="700" transform="rotate(-90 540 286)">ONE BLOCK</text>
+        <g class="mono">
+          <rect x="200" y="108" width="70" height="30" rx="7" fill="#d1fae5" stroke="#6ee7b7"/><text x="235" y="129" text-anchor="middle" font-size="17" fill="#047857">the'</text>
+          <rect x="285" y="108" width="70" height="30" rx="7" fill="#d1fae5" stroke="#6ee7b7"/><text x="320" y="129" text-anchor="middle" font-size="17" fill="#047857">bank'</text>
+          <rect x="370" y="108" width="70" height="30" rx="7" fill="#d1fae5" stroke="#6ee7b7"/><text x="405" y="129" text-anchor="middle" font-size="17" fill="#047857">…</text>
+        </g>
+        <text x="320" y="92" text-anchor="middle" font-size="17" fill="#047857">same shape out as in: (n × 384) → (n × 384)</text>
+      </g>
+      <g id="stackable" class="sp-hide">
+        <rect x="130" y="30" width="380" height="40" rx="10" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="320" y="56" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">same shape in/out ⇒ blocks snap together like LEGO</text>
+      </g>
+      <defs>
+        <marker id="bl-g" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 z" fill="#059669"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-blk-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-block svg",
+        caption: "#fig-blk-cap",
+        steps: [
+          { caption: "Token vectors arrive — embeddings + positions if this is layer 1, or the previous block's output otherwise." },
+          { caption: "Move 1: normalize, then multi-head attention — the only place tokens talk to each other.", show: ["#stage1"] },
+          { caption: "…wrapped in a residual: the attention output is ADDED to the incoming stream (the 5.5 highway).", show: ["#res1"] },
+          { caption: "Move 2: normalize, then the FFN — every token processes its gathered context alone.", show: ["#stage2"] },
+          { caption: "…also residual-wrapped. That's the complete block: mix, think, both as additive corrections.", show: ["#res2"] },
+          { caption: "Output has the SAME shape as input — n tokens × 384 dims. That closure property is the whole trick of scale…", show: ["#blk-done"] },
+          { caption: "…because same-shape-in/out means blocks stack indefinitely. Depth becomes a dial: 6, 12, 96. Nothing new is ever invented above this line.", show: ["#stackable"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Stacking: what six floors buy</h2>
+
+  <p>
+    Why repeat the block? Because each pass is one round of
+    <em>gather-context-then-process</em>, and rounds compound. Probing studies
+    (running diagnostics on each layer's vectors) show a consistent progression —
+    lower layers resolve local, surface-level structure; middle layers, syntax and
+    grammatical roles; upper layers, semantics, coreference, and task-level
+    abstractions. Layer 1's "bank" has glanced at its neighbors; layer 6's "bank"
+    has settled into river-country with its whole clause accounted for. Composition,
+    not repetition — the same reason M3.1 said depth beats width for hierarchy.
+  </p>
+
+  <h2>Reading a config.json like an engineer</h2>
+
+  <p>Here is all-MiniLM-L6-v2's actual configuration, annotated with the page that explains each line:</p>
+
+<pre><code>{
+  "hidden_size": 384,               // d_model — the residual stream's width   (5.5)
+  "num_hidden_layers": 6,           // the block, stacked — the "L6"           (this page)
+  "num_attention_heads": 12,        // 12 heads × 32 dims each                 (5.4)
+  "intermediate_size": 1536,        // FFN expansion: 4 × 384                  (5.5)
+  "hidden_act": "gelu",             // the bend                                (3.1)
+  "vocab_size": 30522,              // WordPiece vocabulary                    (5.1)
+  "max_position_embeddings": 512,   // learned position table = the 512 limit  (5.2)
+  "hidden_dropout_prob": 0.1,       // regularization                          (3.5)
+  "layer_norm_eps": 1e-12,          // the ε inside LayerNorm                  (5.5)
+}
+</code></pre>
+
+  <p>
+    Every field maps to a page you've read. This is the moment the course promised on
+    the map page: <strong>the black box has a wiring diagram, and you can read it.</strong>
+    The same schema (bigger numbers) describes BERT, GPT, Llama — check any model card's
+    config and you'll find these exact knobs.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers: three configs, one schema</div>
+    <p>
+      <strong>all-MiniLM-L6-v2</strong>: d=384, L=6, heads=12, FFN=1536 → 22.7M params.
+      <strong>BERT-base</strong>: d=768, L=12, heads=12, FFN=3072 → 110M.
+      <strong>Llama-3-8B</strong>: d=4096, L=32, heads=32 (8 KV), FFN=14336, RoPE
+      positions → 8.0B. Same blueprint at three zoom levels — the dials move together
+      (that's M7.4's scaling laws), the architecture doesn't change.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      You can now do something concrete you couldn't a week ago: open any Hugging Face
+      model page, click "config.json", and <em>know what you're looking at</em> —
+      including spotting why one model is slow (big L, big d), why another truncates
+      your text (max_position_embeddings), and what "L6 vs L12" costs and buys
+      (MiniLM-L12 exists: same width, double depth, ~2× slower, a bit more accurate —
+      a trade you can now reason about instead of guessing).
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: compute BERT-base's 110M parameters by hand</div>
+<pre><code># every line is arithmetic you can check on paper
+V, P, d, L, ffn = 30522, 512, 768, 12, 3072
+
+emb = V*d + P*d + 2*d              # token + position + segment tables
+attn_layer = 4*(d*d + d)           # W_Q, W_K, W_V, W_O with biases      (5.3-5.4)
+ffn_layer  = d*ffn + ffn + ffn*d + d   # expand + compress, with biases  (5.5)
+ln_layer   = 2 * 2*d               # two LayerNorms, each γ and β        (5.5)
+block      = attn_layer + ffn_layer + ln_layer
+
+total = emb + L*block + 2*d        # + final embedding LayerNorm
+print(f"embeddings: {emb/1e6:.2f}M")       # ≈ 23.8M
+print(f"per block : {block/1e6:.2f}M")     # ≈ 7.09M
+print(f"total     : {total/1e6:.1f}M")     # ≈ 108.9M  ← the famous "110M" ✓
+
+# now YOU: change the constants to MiniLM (30522, 512, 384, 6, 1536)
+# and verify ≈22.7M. Then try Llama-3-8B's numbers for sport.
+</code></pre>
+    <p>
+      Matching a published parameter count from first principles is a rite of passage —
+      after it, no model size will ever be a mystery number again, and M7.2's memory
+      math becomes trivial (bytes = params × precision).
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    The block = <strong>[LayerNorm → attention → +residual] then [LayerNorm → FFN →
+    +residual]</strong>, shape-preserving, stackable. A transformer is: embeddings +
+    positions → the block × L → output. MiniLM-L6 is literally this block six times
+    at width 384 — a diagram you can now draw, parameter-count, and read from its
+    config file.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Draw/describe a transformer encoder block from memory.</summary>
+      <div><p>Input: n token vectors of width d. Sublayer 1: LayerNorm, multi-head self-attention, output added to the input (residual). Sublayer 2: LayerNorm, position-wise FFN (d → 4d → GELU → d), again residual-added. Output: n × d, same shape, feeding the next identical block. Attention is the only cross-token operation; the FFN is per-token; the residual stream carries state through the whole stack.</p></div>
+    </details>
+    <details>
+      <summary>Why must the block preserve its input shape, and what does that enable?</summary>
+      <div><p>The residual addition x + f(x) requires f(x) to match x's shape, and stacking requires each block's output to be a valid input to the next. This closure makes depth a free hyperparameter — 6 or 96 layers with zero architectural change — and enables tricks that exploit uniformity: layer pruning/early exit, pipeline parallelism across layers (M7.3), and depth-based distillation (M9.4's L6-from-L12 story).</p></div>
+    </details>
+    <details>
+      <summary>What changes between layer 1 and layer 6 of an encoder, functionally?</summary>
+      <div><p>Weights are separate per layer (no sharing in standard transformers), and learned function differs systematically: probing shows lower layers capture surface/local patterns, middle layers syntax, upper layers semantics and coreference — each block is another round of gather-then-process, so abstraction compounds. Practical consequences: middle-layer representations often transfer best for similarity tasks, and last-layer ones for classification — and sentence-embedding models choose their pooling layer accordingly (M9.1).</p></div>
+    </details>
+    <details>
+      <summary>Given a config.json, estimate the parameter count.</summary>
+      <div><p>Embeddings ≈ vocab×d (+ positions×d if learned). Per block: attention 4d² + FFN 2×d×d_ffn (≈ 8d² at the standard 4× ratio) ≈ 12d² total. Total ≈ vocab×d + L×12d². Sanity checks: BERT-base ≈ 23.8M + 12×7.1M ≈ 109M ✓; the formula also shows why doubling d roughly quadruples layer cost (d²) while doubling L only doubles it — a scaling intuition interviewers probe.</p></div>
+    </details>
+    <details>
+      <summary>MiniLM-L6 vs MiniLM-L12: how do you choose, and what exactly differs?</summary>
+      <div><p>Same width (384), same heads, same vocab — only depth differs: 6 vs 12 blocks, so ~2× the non-embedding compute and latency for L12, with modest quality gains (≈1–3 points on retrieval benchmarks). Choose by the bottleneck: embedding millions of documents or CPU-serving → L6; scoring quality on hard domains with GPU headroom → L12 or a larger family. The honest engineering answer is "benchmark both on YOUR recall@k" (M9.5's method).</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>
