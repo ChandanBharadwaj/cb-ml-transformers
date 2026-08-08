@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tool Calling &amp; Agents — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="12-your-stack/tool-calling-and-agents">
+<main id="content">
+
+  <h1>Tool Calling &amp; Agents</h1>
+
+  <p>
+    You've used agentic tools — function calling, ReAct loops, maybe MCP, and coding
+    agents like Cursor or Claude Code. This page demystifies the last black box, and
+    the reveal is the same one that has run through the whole course:
+    <strong>it's all just tokens</strong>. A model that only predicts the next token
+    (M4.1) can't "call" anything. What actually happens is a beautifully simple
+    illusion built from generation, parsing, and a loop — and once you see it, the
+    course capstone is to build one yourself, from the raw API, over the RAG you
+    already built.
+  </p>
+
+  <h2>Function calling: constrained generation plus a runtime</h2>
+
+  <p>
+    Here's the whole trick. You describe your tools as JSON schemas and send them in
+    the prompt (serialized into tokens, like everything else). The model, when it
+    decides a tool is needed, doesn't execute anything — it <em>generates text</em>
+    in the shape of a tool call: a JSON object naming the tool and its arguments.
+    <strong>Your code</strong> parses that JSON, actually runs the function, and
+    feeds the result back into the conversation as more tokens. The model then
+    continues, now able to attend to the result. "The model called the weather API"
+    really means: the model emitted <code>{"tool":"get_weather","args":{"city":"Paris"}}</code>,
+    your runtime saw it, called the API, and pasted "18°C" back. The model's only
+    superpower is producing well-formed JSON on cue (helped by fine-tuning, M8.3,
+    and constrained decoding); everything else is your loop.
+  </p>
+
+  <figure class="anim" id="fig-toolcall">
+    <div class="fig-title">Animation · What "calling a tool" actually is</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-toolcall-t">
+      <title id="fig-toolcall-t">A model emitting JSON, the runtime executing a function, and the result fed back as tokens</title>
+      <g>
+        <rect x="30" y="26" width="180" height="50" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+        <text x="120" y="48" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">user: "weather</text>
+        <text x="120" y="68" text-anchor="middle" font-size="17" fill="#1d4ed8">in Paris?"</text>
+      </g>
+      <g id="tc-schema" class="sp-hide">
+        <rect x="230" y="26" width="380" height="50" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="420" y="48" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">+ tool schemas in the prompt (just tokens):</text>
+        <text x="420" y="68" text-anchor="middle" font-size="17" class="mono" fill="#64748b">get_weather(city: string) → temp</text>
+      </g>
+      <!-- model emits json -->
+      <g id="tc-emit" class="sp-hide">
+        <rect x="120" y="98" width="400" height="52" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="320" y="120" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">model GENERATES (does not execute):</text>
+        <text x="320" y="142" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">{"tool":"get_weather","args":{"city":"Paris"}}</text>
+      </g>
+      <!-- runtime -->
+      <g id="tc-run" class="sp-hide">
+        <rect x="120" y="168" width="400" height="52" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="320" y="190" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">YOUR CODE parses the JSON &amp; runs the function</text>
+        <text x="320" y="212" text-anchor="middle" font-size="17" class="mono" fill="#b45309">get_weather("Paris") → "18°C, clear"</text>
+      </g>
+      <!-- result back -->
+      <g id="tc-back" class="sp-hide">
+        <rect x="120" y="238" width="400" height="52" rx="10" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+        <text x="320" y="260" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">result appended to conversation as tokens</text>
+        <text x="320" y="282" text-anchor="middle" font-size="17" class="mono" fill="#047857">tool result: "18°C, clear" → model reads it</text>
+      </g>
+      <g id="tc-final" class="sp-hide">
+        <rect x="120" y="304" width="400" height="42" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="320" y="330" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">model: "It's 18°C and clear in Paris."</text>
+      </g>
+      <g id="tc-punch" class="sp-hide">
+        <rect x="40" y="356" width="560" height="38" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="380" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">the model never "did" anything but generate JSON. The loop is yours.</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-toolcall-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-toolcall svg",
+        caption: "#fig-toolcall-cap",
+        steps: [
+          { caption: "A user asks something the model can't answer from weights alone — live weather. It needs a tool." },
+          { caption: "You've put your tools' JSON schemas in the prompt — names, arguments, types. To the model these are just more input tokens describing what's available.", show: ["#tc-schema"], holdMs: 5600 },
+          { caption: "The model GENERATES a tool call — text in JSON shape. It did NOT run anything; it predicted tokens that happen to describe a function call. Fine-tuning taught it this format.", show: ["#tc-emit"], holdMs: 6000 },
+          { caption: "Your runtime — ordinary code — parses that JSON, validates it, and actually calls get_weather('Paris'). This is where real execution lives, entirely outside the model.", show: ["#tc-run"], holdMs: 6000 },
+          { caption: "The result is appended to the conversation as more tokens. Now the model can attend to '18°C' (M5.3) on its next pass.", show: ["#tc-back"], holdMs: 5600 },
+          { caption: "The model reads the result and writes the natural-language answer. Done.", show: ["#tc-final"], holdMs: 5000 },
+          { caption: "The reveal: the model only ever generated text. Tool calling is constrained generation + your parse-and-execute loop. Agents are this, looped.", show: ["#tc-punch"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The ReAct loop: an agent is tool-calling in a while-loop</h2>
+
+  <p>
+    An "agent" sounds like a new kind of thing; it's the above, looped, until the
+    task is done. The pattern is <strong>ReAct</strong> — Reason, Act, Observe:
+    the model <em>thinks</em> about what to do (chain-of-thought, M11.5),
+    <em>acts</em> by emitting a tool call, your runtime executes and returns an
+    <em>observation</em>, and the loop repeats — each cycle's result feeding the next
+    reasoning step — until the model emits a final answer instead of a tool call.
+    That's it. Multi-step research, "book me a flight," a coding agent editing files:
+    all the same loop, with different tools and more iterations. The model supplies
+    the reasoning and the next action; your code supplies the execution and the
+    memory (the growing transcript).
+  </p>
+
+  <h2>Where it breaks, and where MCP sits</h2>
+
+  <p>
+    Honest failure modes, because agents fail in ways single calls don't.
+    <strong>Loops</strong>: the model repeats a failing action forever (cap
+    iterations, detect repeats). <strong>Hallucinated tools or arguments</strong>:
+    it invents a function you didn't provide or malformed args (validate against the
+    schema, return errors as observations so it can recover — error recovery is a
+    real skill some models have and some don't). <strong>Compounding errors</strong>:
+    a wrong step early poisons everything after (short loops, checkpoints, human
+    confirmation on consequential actions — M11.6's least-privilege, now essential).
+    <strong>Context growth</strong>: every observation is appended, so long tasks
+    fill the window (M11.2) and cost balloons. And <strong>MCP</strong>
+    (Model Context Protocol) is simply a <em>standard</em> for how tools describe
+    themselves and get called — so a tool written once works with any MCP-speaking
+    agent, instead of every app reinventing its own schema format. It's a USB port
+    for tools, not new intelligence.
+  </p>
+
+  <h2>How Cursor and Claude Code actually work</h2>
+
+  <p>
+    No magic, now that you can see the parts: a coding agent is the ReAct loop with
+    file-and-shell tools (read file, edit file, run command, search) plus your
+    codebase as retrievable context (RAG, M12.1 — embed the repo, retrieve relevant
+    files into the prompt). It reasons about your request, reads files to understand
+    them, edits, runs tests, reads the failures as observations, and iterates —
+    exactly the loop above, with a repo for a world. The "agent" is a for-loop around
+    an LLM with good tools, good retrieval, and careful prompting. You have now
+    accounted for every piece.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Practical agent economics: each ReAct step is a full LLM call whose prompt is
+      the <em>entire growing transcript</em>, so a 10-step task can cost far more
+      than 10× a single call — early tokens get re-processed every step (though
+      prompt caching and the KV cache, M11.2, soften prefill cost). Reliability
+      drops with length: if each step succeeds with probability 0.95, a 10-step task
+      completes end-to-end only ~<strong>0.95¹⁰ ≈ 60%</strong> of the time — which is
+      why short loops, verification, and per-step guards matter more than clever
+      prompts. And why production agents cap iterations (commonly 10–25), validate
+      every tool call against its schema, and gate irreversible actions behind human
+      confirmation.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      This page collapses the last mystery into things you own: tool calls are
+      constrained <em>generation</em> (M4.1, M11.1) plus your loop; the model reads
+      results by <em>attending</em> to appended tokens (M5.3); reasoning between
+      steps is <em>chain-of-thought</em> (M11.5); a coding agent's codebase context
+      is <em>RAG</em> (M12.1); and every safety concern is M11.6's injection and
+      least-privilege story, now with real actions attached. The capstone below has
+      you build an agent over your own from-scratch RAG — closing the entire course
+      loop.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Course capstone: a from-scratch agent over your from-scratch RAG</div>
+<pre><code>import json
+from openai import OpenAI
+client = OpenAI()
+
+# TWO tools: a calculator and the RAG retriever you built in 12.1
+def calculator(expr):  return str(eval(expr, {"__builtins__": {}}))
+def search_docs(query): return rag(query)[0]        # your 12.1 rag()
+
+TOOLS = {"calculator": calculator, "search_docs": search_docs}
+SCHEMAS = [
+  {"name": "calculator", "description": "eval a math expression",
+   "parameters": {"type": "object", "properties": {"expr": {"type": "string"}}}},
+  {"name": "search_docs", "description": "search the knowledge base",
+   "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}},
+]
+
+def agent(question, max_steps=8):
+    messages = [{"role": "user", "content": question}]
+    for step in range(max_steps):                    # the ReAct loop
+        r = client.chat.completions.create(
+            model="gpt-4o", messages=messages,
+            tools=[{"type": "function", "function": s} for s in SCHEMAS])
+        msg = r.choices[0].message
+        messages.append(msg)
+        if not msg.tool_calls:                        # final answer → done
+            return msg.content
+        for call in msg.tool_calls:                   # ACT + OBSERVE
+            args = json.loads(call.function.arguments)
+            try:
+                result = TOOLS[call.function.name](**args)
+            except Exception as e:
+                result = f"ERROR: {e}"                 # error-as-observation
+            messages.append({"role": "tool", "tool_call_id": call.id,
+                             "content": result})       # feed back as tokens
+    return "hit step limit"                            # loop guard
+
+print(agent("What's our refund window, and what's 14 days in hours?"))
+</code></pre>
+    <p>
+      Run it and watch the trace: the model calls <code>search_docs</code>, reads the
+      retrieved policy, calls <code>calculator</code> on "14*24", and composes both
+      into one answer — a genuine multi-tool agent, in ~30 lines, with no framework.
+      You have now built an agent over a RAG system using an embedding model whose
+      attention heads you can draw from memory. That is the entire course, end to
+      end, in your own hands.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    A model can only generate tokens — so <strong>tool calling is the model emitting
+    JSON, your code parsing and executing it, and the result fed back as tokens; an
+    agent is that in a Reason-Act-Observe loop until a final answer</strong>. MCP
+    just standardizes the tool interface; Cursor and Claude Code are this loop with
+    file tools and codebase RAG. The intelligence proposes; your runtime disposes —
+    which is exactly why safety and reliability live in the loop, not the prompt.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>A model can only predict tokens. So what actually happens when it "calls a tool"?</summary>
+      <div><p>Nothing executes inside the model. Tool schemas (name, description, argument types) are serialized into the prompt as tokens. When the model determines a tool is needed, it GENERATES a structured output — JSON naming the tool and arguments — using formatting it learned in fine-tuning (and often enforced by constrained decoding so the JSON is valid). The runtime (your code, or the API wrapper) detects this output, parses it, validates against the schema, executes the real function, and appends the result to the conversation as more tokens. On the next forward pass the model attends to that result and continues. So "tool use" = constrained generation + an external parse-execute-feedback loop; the model's contribution is deciding when and emitting well-formed calls, not execution.</p></div>
+    </details>
+    <details>
+      <summary>Explain the ReAct pattern and what each component contributes.</summary>
+      <div><p>ReAct = Reason + Act + Observe, looped. Reason: the model produces chain-of-thought (M11.5) about the current state and what to do next — this is where multi-step planning lives and why reasoning quality matters for agents. Act: it emits a tool call (structured generation). Observe: the runtime executes the tool and returns the result as an observation appended to the transcript. The loop repeats — each observation informing the next reasoning step — until the model emits a final answer instead of a tool call. The division of labor: the model supplies reasoning and action selection; the runtime supplies execution, the growing transcript (memory), and loop control (iteration cap, repeat detection). Interleaving reasoning with acting (vs planning everything upfront) lets the agent adapt to what tools actually return.</p></div>
+    </details>
+    <details>
+      <summary>What are the main failure modes of agents, and how do you mitigate each?</summary>
+      <div><p>(1) Infinite/repeated loops — cap max iterations, detect repeated actions, break with a fallback. (2) Hallucinated tools or malformed arguments — validate every call against the schema; return errors as observations so the model can self-correct (error recovery). (3) Compounding errors — a wrong early step corrupts the rest; mitigate with short loops, intermediate verification/checkpoints, and by keeping tasks decomposed. (4) Context growth — every observation is appended, inflating cost and hitting the window (M11.2); mitigate with summarization, retrieval of only relevant history, and pruning. (5) Unsafe actions from prompt injection (M11.6) — tool outputs and retrieved content can carry attacker instructions; enforce least-privilege tools, scoped credentials, and human confirmation on irreversible actions. Reliability math (0.95^n) makes short, verified loops the dominant design principle.</p></div>
+    </details>
+    <details>
+      <summary>What problem does MCP solve, and what does it NOT do?</summary>
+      <div><p>MCP (Model Context Protocol) standardizes how tools/data-sources describe their capabilities and how agents invoke them — a common interface so a tool implemented once (a database connector, a file server, an API wrapper) works with any MCP-compatible agent, instead of every application inventing its own function-schema format and glue. Think USB for tools: it's about interoperability and reuse. What it does NOT do: it adds no intelligence, no new model capability, and no security by itself — the underlying mechanic is still generate-JSON → parse → execute → feed back, and all the failure modes and safety requirements (validation, least privilege, injection defense) remain the integrator's responsibility. It's plumbing standardization, valuable but not magic.</p></div>
+    </details>
+    <details>
+      <summary>Explain how a coding agent like Cursor or Claude Code works, in terms of components you've learned.</summary>
+      <div><p>It's a ReAct loop (M11.5 reasoning + tool calling) equipped with file/shell tools (read file, edit file, run command, grep/search) and codebase context supplied by RAG (M12.1 — the repo is chunked/embedded and relevant files are retrieved into the prompt, since no codebase fits in a context window). The cycle: reason about the request → read relevant files (retrieval + file tool) to build understanding → propose edits (structured generation) → run tests or commands → read the output as observations → iterate until done. Everything is components you now own: generation (M4/M11.1), attention over appended results (M5.3), chain-of-thought planning (M11.5), retrieval (M12.1), and safety/permission scoping (M11.6). The "agent" is a well-engineered for-loop around an LLM with good tools, good retrieval, and careful prompting — no new primitive.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

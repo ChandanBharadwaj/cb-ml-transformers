@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quantization &amp; the Inference Stack — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="11-llm-era/quantization-and-inference-stack">
+<main id="content">
+
+  <h1>Quantization &amp; the Inference Stack</h1>
+
+  <p>
+    An 8-billion-parameter model needs 16 GB in fp16 (M7.2's arithmetic) — yet people
+    run it on laptops with 8 GB, via Ollama, at usable speed. The trick is
+    <strong>quantization</strong>: storing each of those 8 billion numbers with fewer
+    bits. This page is the intuition for what "4-bit" actually does to a number, why
+    the quality loss is shockingly small, and a decoder ring for the format zoo —
+    GGUF, GPTQ, AWQ — you meet the moment you try to run anything locally.
+  </p>
+
+  <h2>Precision is a number line's resolution</h2>
+
+  <p>
+    A weight is just a number, say 0.2734. Storing it in fp32 uses 32 bits — a number
+    line with billions of notches, overkill for a value a noisy gradient descent
+    (M3.3) only ever learned approximately. fp16 keeps plenty of notches. int8 gives
+    each weight one of 256 notches; int4, one of <strong>16</strong>. Quantization
+    is snapping every weight to its nearest notch: each snap adds a tiny rounding
+    error, the model's outputs blur microscopically, and in exchange the whole thing
+    shrinks 4–8×. The miracle isn't that quality drops — it's how little, because a
+    network of billions of redundant weights (M8.5's low-rank lesson: most of that
+    precision was never load-bearing) averages the rounding noise away.
+  </p>
+
+  <figure class="anim" id="fig-notch">
+    <div class="fig-title">Animation · Snapping weights to a coarser number line</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-notch-t">
+      <title id="fig-notch-t">A weight value snapping to fewer and fewer notches as precision drops</title>
+      <text x="320" y="32" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">one weight: 0.2734…</text>
+      <!-- fp16 line -->
+      <g id="n-fp16">
+        <line x1="60" y1="90" x2="580" y2="90" stroke="#94a3b8" stroke-width="2"/>
+        <g stroke="#94a3b8" stroke-width="1.5">
+          <line x1="60" y1="82" x2="60" y2="98"/><line x1="93" y1="84" x2="93" y2="96"/><line x1="125" y1="84" x2="125" y2="96"/><line x1="158" y1="84" x2="158" y2="96"/><line x1="190" y1="84" x2="190" y2="96"/><line x1="223" y1="84" x2="223" y2="96"/><line x1="255" y1="84" x2="255" y2="96"/><line x1="288" y1="84" x2="288" y2="96"/><line x1="320" y1="82" x2="320" y2="98"/><line x1="353" y1="84" x2="353" y2="96"/><line x1="385" y1="84" x2="385" y2="96"/><line x1="418" y1="84" x2="418" y2="96"/><line x1="450" y1="84" x2="450" y2="96"/><line x1="483" y1="84" x2="483" y2="96"/><line x1="515" y1="84" x2="515" y2="96"/><line x1="548" y1="84" x2="548" y2="96"/><line x1="580" y1="82" x2="580" y2="98"/>
+        </g>
+        <circle cx="335" cy="90" r="8" fill="#2563eb"/>
+        <text x="60" y="120" font-size="17" fill="#64748b">fp16: thousands of notches — error ≈ 0</text>
+      </g>
+      <!-- int8 line -->
+      <g id="n-int8" class="sp-hide">
+        <line x1="60" y1="180" x2="580" y2="180" stroke="#94a3b8" stroke-width="2"/>
+        <g stroke="#94a3b8" stroke-width="2">
+          <line x1="60" y1="170" x2="60" y2="190"/><line x1="190" y1="170" x2="190" y2="190"/><line x1="320" y1="170" x2="320" y2="190"/><line x1="450" y1="170" x2="450" y2="190"/><line x1="580" y1="170" x2="580" y2="190"/>
+        </g>
+        <circle cx="335" cy="180" r="8" fill="#60a5fa" opacity="0.5"/>
+        <circle cx="320" cy="180" r="9" fill="#2563eb"/>
+        <text x="60" y="212" font-size="17" fill="#64748b">int8: 256 notches — snapped, tiny error</text>
+      </g>
+      <!-- int4 line -->
+      <g id="n-int4" class="sp-hide">
+        <line x1="60" y1="268" x2="580" y2="268" stroke="#94a3b8" stroke-width="2"/>
+        <g stroke="#94a3b8" stroke-width="2.5">
+          <line x1="60" y1="256" x2="60" y2="280"/><line x1="320" y1="256" x2="320" y2="280"/><line x1="580" y1="256" x2="580" y2="280"/>
+        </g>
+        <circle cx="335" cy="268" r="8" fill="#60a5fa" opacity="0.4"/>
+        <circle cx="320" cy="268" r="10" fill="#d97706"/>
+        <text x="60" y="300" font-size="17" fill="#64748b">int4: 16 notches — visible snap, real (small) error</text>
+      </g>
+      <g id="n-outlier" class="sp-hide">
+        <rect x="40" y="318" width="560" height="72" rx="12" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="320" y="344" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">the catch: a few OUTLIER weights are huge. One giant value</text>
+        <text x="320" y="366" text-anchor="middle" font-size="17" fill="#b91c1c">stretches the line, wasting notches — so quantizers work in</text>
+        <text x="320" y="386" text-anchor="middle" font-size="17" fill="#b91c1c">small blocks, each with its own scale (that's the extra 0.5 bit)</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-notch-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-notch svg",
+        caption: "#fig-notch-cap",
+        steps: [
+          { caption: "fp16: the number line has thousands of notches between -1 and 1. Our weight 0.2734 sits essentially exactly where it wants to." },
+          { caption: "int8: 256 notches for the whole range. The weight snaps to the nearest one — a rounding error in the third decimal. 2× smaller memory.", show: ["#n-int8"], holdMs: 5400 },
+          { caption: "int4: SIXTEEN notches. The snap is visible now — 0.2734 becomes whatever notch is closest. Per-weight error is real; 4× smaller than fp16.", show: ["#n-int4"], holdMs: 5600 },
+          { caption: "Why this still works: billions of weights, errors in random directions, sums that average them out (M1.2 — dot products are big sums). Redundancy absorbs noise.", holdMs: 5800 },
+          { caption: "The one enemy: outliers. A single huge weight stretches the line so everyone else shares two notches. Fix: quantize in blocks of ~32–64 weights, each block scaled separately.", show: ["#n-outlier"], holdMs: 6200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>What survives, what breaks</h2>
+
+  <p>
+    <strong>Weights quantize gracefully</strong> — they're static, known in advance,
+    and can be carefully blocked and scaled offline. <strong>Activations are
+    harder</strong>: they're computed live, and transformer activations famously
+    contain outlier channels — a few dimensions with values 100× the rest that carry
+    outsized meaning; naively squashing them to 4 bits lobotomizes the model. That's
+    why the standard recipe is "weights in int4, activations and KV cache in fp16,
+    compute in fp16 after dequantizing on the fly" — you pay memory for weights
+    (the biggest bill) and keep the delicate live math precise. And it's why M8.5's
+    QLoRA could freeze a 4-bit base yet train fp16 adapters on top: the frozen
+    part tolerates coarseness, the learning part can't.
+  </p>
+
+  <h2>The format zoo, decoded</h2>
+
+  <p>
+    <strong>GGUF</strong> — the file format of llama.cpp and therefore Ollama and
+    LM Studio: single self-contained file (weights + tokenizer + metadata), CPU-first
+    with GPU offload, quant levels spelled like <code>Q4_K_M</code> (≈4.5 bits/weight,
+    the community's default "sweet spot") or <code>Q8_0</code> (near-lossless).
+    <strong>GPTQ</strong> and <strong>AWQ</strong> — GPU-native 4-bit formats:
+    both use calibration data to quantize <em>cleverly</em> rather than blindly
+    (GPTQ minimizes layer output error; AWQ identifies activation-important weights
+    and protects them), typically served through vLLM. <strong>bitsandbytes</strong> —
+    the "quantize on load" convenience flag (<code>load_in_4bit=True</code>) from
+    QLoRA, best for experimentation and fine-tuning rather than fast serving. Rule of
+    thumb: laptop/local → GGUF; GPU serving → AWQ/GPTQ; training → bitsandbytes.
+  </p>
+
+  <h2>Two speed tricks you'll hear named</h2>
+
+  <p>
+    <strong>FlashAttention</strong> computes exact attention without ever
+    materializing the full n×n matrix in slow GPU memory — it tiles the computation
+    through fast on-chip SRAM (M7.1's memory hierarchy, paying off). Nothing
+    approximate; just dramatically less memory traffic, which is the actual
+    bottleneck of decode. <strong>Speculative decoding</strong>: a small "draft"
+    model proposes several tokens cheaply, the big model verifies them in one
+    parallel pass (verification is prefill-shaped, and prefill is cheap per token) —
+    accepted guesses arrive at draft-model speed with big-model quality, typically
+    2–3× faster generation with mathematically identical output distribution.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Llama-3-8B, the actual downloads: fp16 <strong>16.1 GB</strong> · Q8_0 GGUF
+      <strong>8.5 GB</strong> · Q4_K_M GGUF <strong>4.9 GB</strong> — the file Ollama
+      pulls by default, and why <code>ollama run llama3</code> works on an 8 GB
+      laptop. Measured quality cost of good 4-bit quantization: typically
+      <strong>1–3%</strong> on benchmark suites (perplexity rises a few hundredths) —
+      for a 3.3× memory saving and roughly proportionally faster decode, since decode
+      is memory-bandwidth-bound (M11.2): fewer bytes to stream per token = more
+      tokens per second. Below ~3 bits the floor gives way and quality falls off a
+      cliff; 4-bit is the current sweet spot for a reason.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      This is M7.2's bytes-per-parameter table become a lifestyle: params × 0.5 bytes
+      ≈ your GGUF file size (plus block scales). The reason quantized decode is
+      <em>faster</em>, not just smaller, is M11.2's insight that decode streams bytes
+      from VRAM — shrink the bytes, speed the stream. And if you've ever wondered why
+      your local Ollama model feels slightly blunter than the API version of the
+      same model: you're comparing Q4 to fp16 (plus a different sampling config,
+      M11.1). Now you can name the difference instead of vibing it.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: same model, three precisions, your eyes as judge</div>
+<pre><code># with Ollama installed (ollama.com) — pulls are one-liners:
+ollama run llama3.1:8b-instruct-q4_K_M  "Explain what a KV cache is in 3 sentences."
+ollama run llama3.1:8b-instruct-q8_0    "Explain what a KV cache is in 3 sentences."
+
+# watch tokens/sec in the stats line; then compare answer quality
+# on 5 prompts of your own (one factual, one code, one reasoning).
+
+# GPU/Python route instead — 4-bit in transformers via bitsandbytes:
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Llama-3.1-8B-Instruct",
+    quantization_config=BitsAndBytesConfig(load_in_4bit=True,
+                                           bnb_4bit_quant_type="nf4"))
+print(model.get_memory_footprint() / 1e9, "GB")   # ~5.7 vs ~16 fp16
+</code></pre>
+    <p>
+      The exercise that matters: on your 5 prompts, can you reliably tell Q4 from
+      Q8? Most people can't without reasoning-heavy tasks — which is exactly the
+      1–3% benchmark story, experienced firsthand. Note where Q4 does stumble
+      (usually multi-step arithmetic and rare facts).
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Quantization snaps each weight to a coarser number line — <strong>int4 means 16
+    notches per block, ~4× smaller and correspondingly faster to stream, at a 1–3%
+    quality cost</strong> because billions of redundant weights average the rounding
+    noise away. Weights coarsen well, activations don't (outliers), and the formats
+    are just packaging: GGUF for local, GPTQ/AWQ for GPU serving, bitsandbytes for
+    training.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Why does 4-bit quantization barely hurt quality when it deletes 75% of the information?</summary>
+      <div><p>Three reasons. (1) Redundancy: models are massively overparameterized — training never needed most of that precision (the same fact LoRA exploits: updates are low-rank, weights are compressible). (2) Error averaging: every output is a sum over thousands of weight×activation products (dot products); independent rounding errors partially cancel, so the SUM's relative error is far smaller than any weight's. (3) Block-wise scaling: quantizing in groups of 32–64 with per-block scale factors keeps the 16 notches matched to each block's local range, so no weight is grossly misplaced. The limit: below ~3 bits, errors stop averaging out and quality collapses nonlinearly.</p></div>
+    </details>
+    <details>
+      <summary>Why are activations harder to quantize than weights?</summary>
+      <div><p>Weights are static — known offline, so you can pick optimal block scales, reorder, and calibrate (GPTQ/AWQ do exactly this). Activations are computed at runtime and, in transformers, exhibit extreme outlier channels: a handful of dimensions with magnitudes ~100× the median that carry disproportionate signal (LLM.int8() documented this). A naive 4-bit grid either clips outliers (destroying their signal) or stretches to fit them (crushing everything else into two notches). Practical consequence: standard "4-bit models" are weight-only quantization — activations, KV cache, and arithmetic stay fp16 — and weight memory is fortunately the dominant bill.</p></div>
+    </details>
+    <details>
+      <summary>Someone asks whether to run Q4 or Q8 locally, or pay for an API. Give the engineer's decision tree.</summary>
+      <div><p>How much VRAM/RAM? 8B model: Q4 ≈ 5 GB, Q8 ≈ 8.5 GB, fp16 ≈ 16 GB — pick the largest that fits with room for KV cache (M11.2). Task type? Chat/summarization/RAG-answering: Q4_K_M is indistinguishable in blind tests — take the speed. Multi-step reasoning, math, code where a 1-3% edge compounds across steps: prefer Q8 or fp16. Privacy or per-token cost dominates → local; peak quality or no hardware → API (which serves fp16/fp8 on H100s). And always benchmark on YOUR 20-prompt golden set (11.4's habit) rather than trusting leaderboard deltas — quantization sensitivity is model- and task-specific.</p></div>
+    </details>
+    <details>
+      <summary>Explain speculative decoding and why it produces identical output distributions.</summary>
+      <div><p>A small draft model generates k candidate tokens autoregressively (cheap). The large model then scores all k positions in ONE parallel forward pass — verification is prefill-shaped, and prefill parallelizes (M11.2). Each draft token is accepted with probability min(1, p_large/p_draft) via rejection sampling; on first rejection, the large model's own distribution (corrected) supplies the token, and drafting resumes. The rejection-sampling construction mathematically guarantees the final sequence is distributed exactly as if the large model had sampled alone — it's lossless speedup, typically 2-3× when the draft model agrees often (which it does on easy tokens: articles, syntax, obvious continuations — most of language).</p></div>
+    </details>
+    <details>
+      <summary>What problem does FlashAttention solve if it computes exactly the same attention?</summary>
+      <div><p>Memory traffic, not math. Naive attention materializes the n×n score matrix in HBM (GPU main memory), reads/writes it multiple times (scores → softmax → weighted sum), and at long context those transfers dominate runtime — attention is bandwidth-bound, not FLOP-bound. FlashAttention tiles Q, K, V into blocks that fit in on-chip SRAM (~100× faster than HBM), computes softmax incrementally with a running max/denominator (the online-softmax trick), and never writes the full matrix. Same numbers out, 2–4× faster and O(n) memory instead of O(n²) — which is also what made longer training contexts affordable. It's M7.1's memory-hierarchy lesson as a single algorithm.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

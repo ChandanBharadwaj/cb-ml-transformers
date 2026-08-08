@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reranking &amp; Retrieval Quality — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="12-your-stack/reranking-and-retrieval-quality">
+<main id="content">
+
+  <h1>Reranking &amp; Retrieval Quality</h1>
+
+  <p>
+    M9.2 left a trade-off hanging: bi-encoders are fast but coarse (embed each side
+    separately), cross-encoders are accurate but slow (read both sides together).
+    Reranking resolves it — not by choosing, but by using each where it shines. This
+    is the single highest-leverage upgrade most RAG systems are missing, and it's
+    built entirely from parts you already have: the bi-encoder from M9, the
+    cross-encoder from M9.2, and the retrieval metrics from M9.5.
+  </p>
+
+  <h2>Two-stage retrieval: recall fast, then rank smart</h2>
+
+  <p>
+    The insight: you don't need accuracy on all million chunks — only on the handful
+    you'll actually show the LLM. So split the job. <strong>Stage 1 (retrieve):</strong>
+    the bi-encoder — your pre-embedded index — scans everything and returns the top
+    ~50 candidates. Its job is <em>recall</em>: get the right chunk somewhere in
+    those 50, cheaply. <strong>Stage 2 (rerank):</strong> a cross-encoder reads the
+    query <em>together with</em> each of those 50 (full cross-attention, M9.2) and
+    re-scores them, promoting the truly relevant to the top ~5. Its job is
+    <em>precision</em> at the top. Fifty slow-but-smart passes is nothing; fifty
+    <em>million</em> would be impossible — which is exactly why you filter to 50
+    first. The funnel makes the expensive model affordable.
+  </p>
+
+  <figure class="anim" id="fig-funnel">
+    <div class="fig-title">Animation · The retrieve-then-rerank funnel</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-funnel-t">
+      <title id="fig-funnel-t">Millions of chunks narrowed to 50 by a bi-encoder then reordered to top 5 by a cross-encoder</title>
+      <!-- corpus -->
+      <g id="f-corpus">
+        <rect x="40" y="40" width="560" height="50" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="62" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">1,000,000 chunks in the index</text>
+        <text x="320" y="82" text-anchor="middle" font-size="17" fill="#64748b">far too many for full attention on each</text>
+      </g>
+      <!-- stage 1 -->
+      <g id="f-s1" class="sp-hide">
+        <path d="M 120 100 L 520 100 L 400 150 L 240 150 Z" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="320" y="128" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">STAGE 1 · bi-encoder (M9)</text>
+      </g>
+      <g id="f-50" class="sp-hide">
+        <rect x="200" y="162" width="240" height="42" rx="10" fill="#bfdbfe" stroke="#2563eb"/>
+        <text x="320" y="182" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">top 50 candidates</text>
+        <text x="320" y="200" text-anchor="middle" font-size="17" fill="#64748b">cheap cosine · high recall · rough order</text>
+      </g>
+      <!-- stage 2 -->
+      <g id="f-s2" class="sp-hide">
+        <path d="M 220 214 L 420 214 L 370 262 L 270 262 Z" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+        <text x="320" y="242" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">STAGE 2 · cross-encoder</text>
+      </g>
+      <g id="f-5" class="sp-hide">
+        <rect x="240" y="274" width="160" height="42" rx="10" fill="#6ee7b7" stroke="#059669" stroke-width="2"/>
+        <text x="320" y="294" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">top 5 · reordered</text>
+        <text x="320" y="312" text-anchor="middle" font-size="17" fill="#047857">precise · into the prompt</text>
+      </g>
+      <g id="f-reorder" class="sp-hide">
+        <text x="470" y="240" font-size="17" fill="#64748b">the chunk ranked</text>
+        <text x="470" y="262" font-size="17" fill="#64748b">#37 by cosine was</text>
+        <text x="470" y="284" font-size="17" fill="#047857" font-weight="700">actually #1 — the</text>
+        <text x="470" y="306" font-size="17" fill="#047857" font-weight="700">reranker caught it</text>
+      </g>
+      <g id="f-punch" class="sp-hide">
+        <rect x="40" y="330" width="560" height="58" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="320" y="354" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">bi-encoder for RECALL over millions, cross-encoder for</text>
+        <text x="320" y="376" text-anchor="middle" font-size="17" fill="#b45309">PRECISION over dozens — M9.2's trade-off, resolved by staging</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-funnel-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-funnel svg",
+        caption: "#fig-funnel-cap",
+        steps: [
+          { caption: "A million chunks. A cross-encoder reading the query with each would be a million slow forward passes per question — impossible in real time." },
+          { caption: "Stage 1: the bi-encoder scans all million via pre-computed vectors and cheap cosine. Fast, and tuned for RECALL — the right chunk just needs to land in the top 50.", show: ["#f-s1"], holdMs: 5800 },
+          { caption: "Out comes a shortlist of 50. High recall, but the ORDER is rough — bi-encoders compress each side independently, so subtle relevance gets lost.", show: ["#f-50"], holdMs: 5600 },
+          { caption: "Stage 2: the cross-encoder reads the query TOGETHER with each of the 50 (full cross-attention, M9.2). 50 slow passes — trivial. It re-scores for true relevance.", show: ["#f-s2"], holdMs: 5800 },
+          { caption: "The payoff: a chunk cosine buried at #37 gets promoted to #1 because the cross-encoder actually read it against the query. Only the top 5 go to the LLM.", show: ["#f-5", "#f-reorder"], holdMs: 6000 },
+          { caption: "Each model where it's strong: bi-encoder recalls cheaply over everything, cross-encoder ranks precisely over the survivors. That's reranking.", show: ["#f-punch"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Why the cross-encoder is worth the wait</h2>
+
+  <p>
+    Recall M9.2's core distinction. A bi-encoder squeezes the query into one vector
+    and each document into one vector <em>before</em> they ever meet — so the model
+    can never notice that the query's word "not" flips the document's meaning, or
+    that a pronoun in the query refers to a term in the doc. A cross-encoder feeds
+    <code>[query] [SEP] [document]</code> through the transformer as one sequence:
+    every query token attends to every document token (M5.3), so it catches
+    negation, coreference, and fine-grained relevance a compressed vector loses.
+    The cost is that nothing is precomputable — you can't embed documents ahead of
+    time because the score depends on the query — which is exactly why it can only
+    run on a small candidate set, and exactly why stage 1 exists to produce one.
+  </p>
+
+  <h2>Query transformations: fixing the question, not just the ranking</h2>
+
+  <p>
+    Sometimes retrieval fails because the <em>query</em> is the problem, and three
+    cheap rewrites help. <strong>Multi-query</strong>: an LLM rephrases the question
+    3–4 ways, you retrieve for each and union the results — robustness against any
+    single phrasing missing the right chunk. <strong>HyDE</strong> (hypothetical
+    document embeddings): have an LLM write a fake <em>answer</em>, embed that, and
+    search with it — because a hypothetical answer lives nearer the real answer in
+    embedding space than the terse question does (asymmetric search, M9.2, turned to
+    advantage). <strong>Decomposition</strong>: split a multi-part question into
+    sub-questions, retrieve for each, combine — the retrieval analogue of
+    chain-of-thought (M11.5). All trade extra LLM calls for recall; measure whether
+    the trade pays.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Adding a cross-encoder reranker (e.g. <code>bge-reranker</code> or
+      <code>ms-marco-MiniLM</code>) over the top 50 typically lifts
+      <strong>recall@5 and MRR by 10–25 points</strong> on domain data — the single
+      biggest quality jump most RAG systems can make, and it needs no retraining.
+      Latency cost: a small cross-encoder reranks 50 pairs in
+      <strong>~50–150 ms</strong> on a GPU (more on CPU) — real, but usually
+      dwarfed by the LLM generation call that follows. The knobs: retrieve more in
+      stage 1 (top 50 → 100) to raise the recall ceiling the reranker can reach;
+      keep fewer in stage 2 (top 5 → 3) to save context tokens (M11.2). Rule of
+      thumb: rerank when your bi-encoder recall@5 is mediocre but recall@50 is high —
+      that gap is exactly what reranking harvests.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      This page is M9.2's abstract trade-off becoming an architecture decision you'll
+      actually ship. Bi-encoder = the twin towers you can pre-embed (why RAG scales);
+      cross-encoder = the joint-attention reader you can't (why it's accurate). And
+      note GLiNER (M10.2) sat exactly here — labels and text read together in one
+      pass, feasible because the "corpus" (your label list) was tiny. Reranking is
+      the same move: pay for joint attention only on a set small enough to afford it.
+      The metrics that prove it worked are M9.5's, applied in the build.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: add a reranker, measure the jump</div>
+<pre><code>from sentence_transformers import SentenceTransformer, CrossEncoder
+import numpy as np
+
+bi    = SentenceTransformer("all-MiniLM-L6-v2")            # stage 1 (M9)
+cross = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")  # stage 2
+
+index = bi.encode(chunks, normalize_embeddings=True)      # from 12.1
+
+def retrieve(q, k1=50):
+    qv = bi.encode([q], normalize_embeddings=True)[0]
+    return list(np.argsort(-(index @ qv))[:k1])           # top-50 ids
+
+def rerank(q, cand_ids, k2=5):
+    pairs = [[q, chunks[i]] for i in cand_ids]
+    scores = cross.predict(pairs)                          # joint attention
+    order = np.argsort(-scores)
+    return [cand_ids[i] for i in order[:k2]]
+
+# --- measure on your 9.5 eval set: {query: gold_chunk_id} -----------
+def recall_at_5(get_top5):
+    hits = sum(gold in get_top5(q) for q, gold in eval_set.items())
+    return hits / len(eval_set)
+
+print("bi-encoder recall@5 :", recall_at_5(lambda q: retrieve(q, 5)))
+print("+ reranker recall@5 :", recall_at_5(lambda q: rerank(q, retrieve(q, 50))))
+</code></pre>
+    <p>
+      Run it on the eval set you built in 9.5 and watch the second number jump. Then
+      probe the trade: does retrieving 100 in stage 1 raise the reranked recall
+      further? At what latency? You're now tuning a two-stage retriever with real
+      metrics — the exact skill that separates a demo RAG from a production one.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    Reranking resolves M9.2's trade-off by <strong>staging it: a fast bi-encoder
+    recalls the top ~50 over millions, then a slow cross-encoder reads the query
+    with each of those 50 and precisely reorders to the top ~5</strong>. It's the
+    highest-ROI, no-retraining upgrade in RAG (often +10–25 recall points), it's
+    only affordable because stage 1 shrinks the candidate set, and query rewrites
+    (multi-query, HyDE) fix the other half — the question itself.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Why use two stages instead of just the more accurate model everywhere?</summary>
+      <div><p>Because the accurate model (cross-encoder) can't precompute anything — its score depends on the query-document pair jointly, so it needs one full forward pass per candidate at query time. Running it over a million-chunk corpus per query is infeasible (millions of passes, seconds-to-minutes latency). The bi-encoder, by contrast, precomputes every document vector offline and reduces query-time work to cheap dot products, so it can scan everything — but that independent compression loses fine relevance signal. Two stages let each operate in its sweet spot: bi-encoder for cheap high-recall filtering over the full corpus, cross-encoder for precise reranking over the dozens that survive. It's the classic cheap-recall-then-expensive-precision cascade.</p></div>
+    </details>
+    <details>
+      <summary>What specifically can a cross-encoder capture that a bi-encoder cannot, and why?</summary>
+      <div><p>Token-level interactions between query and document: negation ("side effects NOT including nausea" vs a doc listing nausea), coreference/binding (which entity a query pronoun refers to in the doc), exact term alignment, and fine relevance distinctions among topically-similar passages. Mechanism: the bi-encoder pools each text into a single fixed vector BEFORE they interact, so any signal requiring both texts' tokens to attend to each other is already destroyed at scoring time — the two vectors just get a dot product. The cross-encoder concatenates query and document into one sequence and runs full self-attention (M5.3), so every query token can attend to every document token, preserving those interactions. The price is exactly that entanglement: no precomputation possible.</p></div>
+    </details>
+    <details>
+      <summary>How do you decide whether reranking is worth adding, and how do you tune the two k values?</summary>
+      <div><p>Diagnostic: measure recall@5 vs recall@50 with the bi-encoder alone on a labeled eval set (M9.5). If recall@50 is high but recall@5 is mediocre, the right chunks ARE being retrieved but ranked poorly — precisely the gap reranking harvests, so add it. If recall@50 is already low, reranking can't help (it only reorders what stage 1 found) — fix stage 1 first (better embedder, hybrid search, chunking). Tuning: k1 (stage-1 depth) sets the recall ceiling — raise it (50→100) until reranked recall plateaus or latency hurts; k2 (final count) trades context tokens/lost-in-the-middle risk (M11.2) against coverage — usually 3–5. Always weigh the latency: reranker time is real but typically small next to LLM generation.</p></div>
+    </details>
+    <details>
+      <summary>Explain HyDE and why generating a fake answer to search with can beat searching with the question.</summary>
+      <div><p>HyDE (Hypothetical Document Embeddings): an LLM writes a plausible hypothetical answer to the query, you embed THAT and use it as the search vector. It works because of asymmetry (M9.2) — questions and answers are stylistically and lexically different, so a terse question often sits far from the document that answers it in embedding space, while a hypothetical answer looks like a document and lands near the real ones. It effectively bridges the query-document gap without a specially trained asymmetric embedder. Trade-offs: an extra LLM call per query (latency/cost), and it can hallucinate a hypothetical answer that steers retrieval wrong on out-of-distribution queries — so measure it against plain retrieval and multi-query on your eval set rather than assuming it helps.</p></div>
+    </details>
+    <details>
+      <summary>Your RAG answers are wrong but manual inspection shows the right chunk is in the top 50, just not the top 5. What do you change?</summary>
+      <div><p>This is the textbook reranking case: recall@50 is high, recall@5 is low — retrieval found it, ranking buried it. Add a cross-encoder reranker over the top 50 and pass its top 5 to the LLM; expect a large recall@5/MRR jump with no retraining. Secondary levers if reranking isn't enough: increase k passed to the generator (5→8) if context budget allows; check for lost-in-the-middle (M11.2) and reorder best chunks to the prompt edges; consider hybrid search if the misranking is due to exact-term queries the dense embedder smooths over; and verify chunking isn't splitting the answer awkwardly. Confirm each change on the eval set — the whole point is that you can now measure the fix, not guess it.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

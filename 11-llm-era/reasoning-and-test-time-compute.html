@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reasoning &amp; Test-Time Compute — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="11-llm-era/reasoning-and-test-time-compute">
+<main id="content">
+
+  <h1>Reasoning &amp; Test-Time Compute</h1>
+
+  <p>
+    Every model picker you use now has a fork in it: the fast model, or the
+    "thinking" one that sits silent for thirty seconds and costs several times more.
+    This page explains what that second option actually does, why "think step by
+    step" was the discovery that started it, and when the thinking tax is worth
+    paying. The core idea is almost embarrassingly mechanical once you have M5.7:
+    <strong>a transformer does a fixed amount of computation per token — so the only
+    way to compute more is to emit more tokens</strong>.
+  </p>
+
+  <h2>Why "think step by step" works: tokens ARE computation</h2>
+
+  <p>
+    Recall the shape of generation: each output token gets one forward pass — the
+    same number of layers, the same matrices, whether the token is "the" or the
+    final digit of a hard calculation. Ask for an instant answer to a multi-step
+    problem and you're demanding the whole derivation be crushed into a single
+    forward pass's worth of compute. It can't fit; the model pattern-matches a
+    plausible answer instead. But let it write intermediate steps, and each step's
+    tokens are appended to the context and <em>attended to</em> by everything after
+    (M5.3) — the sequence becomes a scratchpad, partial results become inputs,
+    and one pass per small step is plenty. Chain-of-thought isn't the model
+    "explaining itself"; it's the model <strong>renting extra forward passes and
+    using its own context window as working memory</strong>.
+  </p>
+
+  <figure class="anim" id="fig-cot">
+    <div class="fig-title">Animation · One pass vs a scratchpad</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-cot-t">
+      <title id="fig-cot-t">The bat and ball problem failing in one shot and succeeding over visible steps</title>
+      <g>
+        <rect x="40" y="26" width="560" height="64" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="52" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">"A bat and a ball cost $1.10. The bat costs $1.00</text>
+        <text x="320" y="76" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">more than the ball. What does the ball cost?"</text>
+      </g>
+      <!-- direct answer -->
+      <g id="c-direct" class="sp-hide">
+        <rect x="40" y="108" width="270" height="66" rx="12" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="175" y="134" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">instant answer:</text>
+        <text x="175" y="160" text-anchor="middle" font-size="18" class="mono" fill="#b91c1c" font-weight="700">"10 cents" ✗</text>
+      </g>
+      <g id="c-why" class="sp-hide">
+        <text x="330" y="134" font-size="17" fill="#64748b">one forward pass = the</text>
+        <text x="330" y="156" font-size="17" fill="#64748b">strongest surface pattern:</text>
+        <text x="330" y="178" font-size="17" fill="#64748b">1.10 − 1.00. Pattern, not math.</text>
+      </g>
+      <!-- CoT -->
+      <g id="c-steps" class="sp-hide">
+        <rect x="40" y="196" width="560" height="128" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+        <g class="mono">
+          <text x="60" y="224" font-size="17" fill="#1d4ed8">let ball = x, so bat = x + 1.00</text>
+          <text id="c-s2" class="sp-hide" x="60" y="250" font-size="17" fill="#1d4ed8">x + (x + 1.00) = 1.10</text>
+          <text id="c-s3" class="sp-hide" x="60" y="276" font-size="17" fill="#1d4ed8">2x = 0.10</text>
+          <text id="c-s4" class="sp-hide" x="60" y="302" font-size="17" fill="#047857" font-weight="700">x = 0.05 → the ball costs 5 cents ✓</text>
+        </g>
+      </g>
+      <g id="c-attn" class="sp-hide">
+        <path d="M 240 306 C 200 290, 160 262, 150 232" fill="none" stroke="#2563eb" stroke-width="2" opacity="0.55"/>
+        <text x="384" y="252" font-size="17" fill="#64748b">each line attends to the</text>
+        <text x="384" y="274" font-size="17" fill="#64748b">lines before it — written</text>
+        <text x="384" y="296" font-size="17" fill="#64748b">tokens = working memory</text>
+      </g>
+      <g id="c-punch" class="sp-hide">
+        <rect x="40" y="344" width="560" height="46" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="320" y="366" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">4 short steps × 1 easy pass each &gt; 1 pass doing it all —</text>
+        <text x="320" y="386" text-anchor="middle" font-size="17" fill="#b45309">chain-of-thought is buying compute with tokens</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-cot-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-cot svg",
+        caption: "#fig-cot-cap",
+        steps: [
+          { caption: "The classic trap problem. Most humans' fast answer is wrong too — and for the same reason the model's is." },
+          { caption: "Forced to answer immediately, the model gets one forward pass to do everything. The strongest pattern wins: '10 cents'. Wrong.", show: ["#c-direct", "#c-why"], holdMs: 5600 },
+          { caption: "Now with room to think: it writes the setup first. These tokens are now IN CONTEXT — later tokens can attend to them.", show: ["#c-steps"], holdMs: 5200 },
+          { caption: "Each line is an easy one-pass step that reads the previous lines. The equation… the simplification…", show: ["#c-s2", "#c-s3", "#c-attn"], holdMs: 5600 },
+          { caption: "…and the correct answer, 5 cents — reached by a chain of trivial steps where the single leap failed.", show: ["#c-s4"], holdMs: 5200 },
+          { caption: "That's the whole mechanism: emitted tokens are extra computation plus working memory. Everything else on this page industrializes this one trick.", show: ["#c-punch"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>From trick to dial: test-time compute</h2>
+
+  <p>
+    For a decade the recipe for better answers was "train a bigger model" — spend
+    more <em>training</em> compute (M7.4's scaling laws). The o1/R1 generation added
+    a second axis: spend more <em>inference</em> compute on each hard question.
+    Accuracy on math and code climbs smoothly as thinking budget grows — a scaling
+    law over thinking tokens — before plateauing. Simplest version:
+    <strong>self-consistency</strong> — sample N chains of thought at temperature
+    (M11.1), take the majority answer; different chains make different errors, and
+    voting averages them out (fifth appearance of ensemble logic in this course).
+    Reasoning models internalize the whole loop: one long private chain that drafts,
+    checks, backtracks — "wait, that's wrong, let me redo this" — before the visible
+    answer.
+  </p>
+
+  <h2>How reasoning models are trained: RL on verifiable rewards</h2>
+
+  <p>
+    You can't SFT your way to real reasoning at scale — imitating written
+    derivations (M8.3) teaches the <em>style</em> of reasoning, complete with
+    confidently-wrong steps. The breakthrough (documented openly in DeepSeek-R1)
+    is reinforcement learning against <strong>graders that can't be charmed</strong>:
+    generate attempts at math and code problems, check them mechanically — the
+    answer matches, the unit tests pass (M11.4's most-trusted evals, now used as
+    reward) — and reinforce whatever token-habits preceded success. No human ranks
+    anything (contrast RLHF, M8.4). Trained this way, models spontaneously develop
+    longer chains, self-checking, and backtracking, because those behaviors
+    <em>win reward</em>. The honest caveat: this works where verification is cheap
+    (math, code) and transfers only partially to fuzzy domains — which is why
+    reasoning models dominate benchmarks in exactly those two areas.
+  </p>
+
+  <div class="formula">
+    <div class="fo-math">P(at least one correct) = 1 − (1 − p)ᴺ</div>
+    <p class="fo-words">
+      In words: if one sampled chain solves the problem with probability p, then N
+      independent tries fail only if all N fail. p = 0.4 and N = 8 gives
+      1 − 0.6⁸ ≈ 0.98 — near-certainty from a coin-flip model, IF you can recognize
+      the right answer among the tries. Majority voting is that recognizer when
+      answers are checkable; that little "if" is the entire reason verifiable
+      domains got reasoning models first.
+    </p>
+  </div>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      The self-consistency paper's headline: GSM8K accuracy for PaLM jumped
+      <strong>~18 points</strong> just by sampling 40 chains and voting — no new
+      training. OpenAI's o1 reported AIME (competition math) going from
+      <strong>~12% (GPT-4o) to ~74–83%</strong> with internal thinking; DeepSeek-R1
+      published comparable jumps with the RL recipe in the open. The bill is equally
+      real: a reasoning model may emit <strong>thousands of hidden thinking tokens</strong>
+      per answer — at output-token prices (M7.5), a "quick question" can cost
+      10–50× the fast model. Latency follows: seconds → minutes.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Every gear in this page is one you already own: fixed compute per token is
+      M5.7's generation loop; attention over written steps is M5.3; sampling diverse
+      chains is M11.1's temperature; verifiable rewards are M11.4's execution-based
+      evals promoted from grader to teacher; the RL loop is M8.4 with a unit test
+      where the human used to be. And the model picker in your tools finally has a
+      policy: extraction, formatting, RAG answers over provided context → fast
+      model; multi-step math, tricky code, planning → pay the thinking tax. Your
+      RAG bot's typical query needs retrieval quality (M9.5), not reasoning tokens.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: measure CoT and self-consistency yourself</div>
+<pre><code>import re, collections
+from openai import OpenAI
+client = OpenAI()
+
+PROBLEMS = [  # 10 GSM8K-style problems with known answers
+    ("A shop sells pens at $3 for a pack of 2. How much for 14 pens?", 21),
+    # ... 9 more
+]
+
+def ask(q, cot, T=0.7):
+    suffix = " Think step by step, then give 'ANSWER: n'." if cot \
+             else " Reply with ONLY 'ANSWER: n'."
+    r = client.chat.completions.create(model="gpt-4o-mini", temperature=T,
+        messages=[{"role": "user", "content": q + suffix}])
+    m = re.search(r"ANSWER:\s*([\d.]+)", r.choices[0].message.content)
+    return float(m.group(1)) if m else None
+
+for label, fn in [
+    ("direct",           lambda q: ask(q, cot=False, T=0)),
+    ("chain-of-thought", lambda q: ask(q, cot=True,  T=0)),
+    ("self-consistency", lambda q: collections.Counter(
+        ask(q, cot=True, T=0.8) for _ in range(5)).most_common(1)[0][0]),
+]:
+    acc = sum(fn(q) == a for q, a in PROBLEMS) / len(PROBLEMS)
+    print(f"{label:18s} {acc:.0%}")
+</code></pre>
+    <p>
+      Expected shape: direct &lt; CoT &lt; self-consistency, with the gap widest on
+      multi-step problems — the accuracy-vs-compute curve, measured on your own ten
+      problems for about a cent. Then note self-consistency cost 5× the tokens of
+      CoT: you've rediscovered the thinking tax and can now decide when it's worth
+      it.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    A transformer spends identical compute on every token, so <strong>the only way
+    to think harder is to emit more tokens — chain-of-thought turns the context
+    window into working memory, sampling-and-voting turns diversity into accuracy,
+    and reasoning models bake the loop in via RL against verifiable rewards</strong>
+    (math checks, tests pass). The tax is real: pay it for multi-step
+    reasoning, skip it for lookups, formatting, and well-retrieved RAG answers.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Mechanistically, why does chain-of-thought prompting improve accuracy?</summary>
+      <div><p>Per-token compute is fixed: one forward pass through L layers regardless of difficulty, so a single-token answer to a multi-step problem must compress the whole derivation into one pass — infeasible, and the model substitutes pattern-matching. CoT lets the model emit intermediate results as tokens, which enter the context and are attended to by subsequent positions: the sequence becomes external working memory, and total computation scales linearly with tokens emitted. Each step is now a small, high-accuracy prediction. Two corollaries: CoT helps most on tasks needing sequential sub-results (math, logic, multi-hop QA) and barely at all on single-hop recall; and the "reasoning" text needn't be faithful to internal computation to be useful — it works by giving compute, not by being an honest self-report.</p></div>
+    </details>
+    <details>
+      <summary>Explain self-consistency and when it beats a single greedy chain.</summary>
+      <div><p>Sample N chains of thought at nonzero temperature, extract each final answer, return the majority. Rationale: distinct chains take distinct reasoning paths whose errors are (partly) independent, while correct paths converge on the same answer — so voting concentrates on truth like any ensemble; if a single chain succeeds with probability p, N tries contain a correct one with 1−(1−p)^N. It beats greedy when (a) the task has a short, comparable final answer to vote over, (b) single-chain accuracy is middling (p≈0.3–0.7 — the regime where votes flip outcomes), and (c) you'll pay N× tokens. It's useless for long open-ended outputs (nothing to vote on — you'd need a judge/reranker instead) and wasteful when p is already ~0.95.</p></div>
+    </details>
+    <details>
+      <summary>How does reasoning-model training (R1-style) differ from RLHF, and why did it emerge in math and code first?</summary>
+      <div><p>RLHF (M8.4) optimizes against a learned reward model trained on human preference rankings — expensive, subjective, and gameable (reward hacking: verbose, sycophantic outputs). R1-style training replaces the human/reward-model with mechanical verification: sample solutions, check the final answer against ground truth or run the unit tests, reward exactly the successes (plus format rewards), reinforce with policy-gradient methods. The grader is incorruptible and infinitely scalable, so the model can explore millions of attempts — and behaviors like long chains, self-verification, and backtracking emerge because they causally increase reward. It emerged in math/code because those domains have cheap, reliable verifiers; the open frontier is extending it to fuzzy domains via rubric-based or judge-based rewards, which reintroduces the gameability RLHF suffers.</p></div>
+    </details>
+    <details>
+      <summary>Give your decision rule for routing between a fast model and a reasoning model in production.</summary>
+      <div><p>Route by task structure and verifiability, not prestige. Fast model: retrieval-grounded answering (quality lives in the retriever, M9.5), extraction, classification, formatting, summarization, casual chat — reasoning tokens add latency and cost with near-zero accuracy gain. Reasoning model: multi-step quantitative work, non-trivial code generation/debugging, constraint-heavy planning, problems where you'd want to double-check your own work. Two practical patterns: escalation (fast model first; retry on the reasoning model when confidence is low, validation fails, or the user disputes) and budget capping (many APIs expose a thinking-effort knob — tune it on your golden set, M11.4, instead of maxing it). Track cost-per-resolved-query, not cost-per-token: a 20× pricier call that avoids three retries can win.</p></div>
+    </details>
+    <details>
+      <summary>Is a model's chain-of-thought a faithful explanation of how it got its answer?</summary>
+      <div><p>No — and this matters for anyone using CoT as an audit trail. The chain is generated text conditioned on the prompt, not a printout of internal activations; studies show models can produce correct answers with flawed chains, flawed answers with clean-looking chains, and post-hoc rationalizations — e.g., when a bias is injected into the prompt (the answer hinted as "(A)"), models often follow the hint while writing a chain that never mentions it. CoT's benefit is computational (more passes + working memory), which doesn't require faithfulness. Treat chains as a useful scratchpad and debugging signal, not as ground truth about the model's "reasons" — for real assurance, verify outputs externally (tests, checkers, grounding checks — the M11.4/12.3 toolkit).</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

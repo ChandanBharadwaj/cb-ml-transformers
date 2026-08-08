@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What You Know Now — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="12-your-stack/what-you-know-now">
+<main id="content">
+
+  <h1>What You Know Now</h1>
+
+  <p>
+    You started this course using tools you couldn't see inside: all-MiniLM turned
+    text into vectors by some unknown process, GLiNER found entities by apparent
+    magic, LLMs answered from an opaque core, and the middle between your classical
+    NLP and your LLM applications was a black box. This page is the same map you saw
+    on day one — the pipeline of your own stack — but now every box is glass. Let's
+    replay it and watch each one become transparent.
+  </p>
+
+  <figure class="anim" id="fig-glass">
+    <div class="fig-title">Animation · Your stack, every box now transparent</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-glass-t">
+      <title id="fig-glass-t">The day-one RAG pipeline with each black box opening to reveal the module that explains it</title>
+      <text x="320" y="28" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">your RAG chatbot — the M0 pipeline, revisited</text>
+      <!-- boxes -->
+      <g id="g-text">
+        <rect x="20" y="60" width="110" height="70" rx="12" fill="#1a202c"/>
+        <text x="75" y="100" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">text in</text>
+      </g>
+      <g id="g-embed">
+        <rect x="150" y="60" width="110" height="70" rx="12" fill="#1a202c"/>
+        <text x="205" y="92" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">embed</text>
+        <text x="205" y="112" text-anchor="middle" font-size="17" fill="#94a3b8">???</text>
+      </g>
+      <g id="g-search">
+        <rect x="280" y="60" width="110" height="70" rx="12" fill="#1a202c"/>
+        <text x="335" y="92" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">retrieve</text>
+        <text x="335" y="112" text-anchor="middle" font-size="17" fill="#94a3b8">???</text>
+      </g>
+      <g id="g-llm">
+        <rect x="410" y="60" width="110" height="70" rx="12" fill="#1a202c"/>
+        <text x="465" y="92" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">LLM</text>
+        <text x="465" y="112" text-anchor="middle" font-size="17" fill="#94a3b8">???</text>
+      </g>
+      <g id="g-ans">
+        <rect x="540" y="60" width="90" height="70" rx="12" fill="#1a202c"/>
+        <text x="585" y="100" text-anchor="middle" font-size="17" fill="#fff" font-weight="700">answer</text>
+      </g>
+      <!-- reveals -->
+      <g id="g-r-embed" class="sp-hide">
+        <rect x="150" y="60" width="110" height="70" rx="12" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="205" y="86" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">embed</text>
+        <text x="205" y="106" text-anchor="middle" font-size="17" fill="#1d4ed8">MiniLM</text>
+        <text x="205" y="124" text-anchor="middle" font-size="17" fill="#64748b">M1–M5, M9</text>
+      </g>
+      <g id="g-r-search" class="sp-hide">
+        <rect x="280" y="60" width="110" height="70" rx="12" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+        <text x="335" y="86" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">retrieve</text>
+        <text x="335" y="106" text-anchor="middle" font-size="17" fill="#047857">cosine+HNSW</text>
+        <text x="335" y="124" text-anchor="middle" font-size="17" fill="#64748b">M1.2, M12</text>
+      </g>
+      <g id="g-r-llm" class="sp-hide">
+        <rect x="410" y="60" width="110" height="70" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="465" y="86" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">LLM</text>
+        <text x="465" y="106" text-anchor="middle" font-size="17" fill="#b45309">transformer</text>
+        <text x="465" y="124" text-anchor="middle" font-size="17" fill="#64748b">M4–M8, M11</text>
+      </g>
+      <!-- module ledger -->
+      <g id="g-ledger" class="sp-hide">
+        <rect x="20" y="150" width="610" height="200" rx="12" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="325" y="176" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">every box, opened:</text>
+        <g class="sv-ink">
+          <text x="38" y="206" font-size="17">• vectors &amp; cosine — M1</text>
+          <text x="38" y="230" font-size="17">• dense embeddings — M2</text>
+          <text x="38" y="254" font-size="17">• neurons, backprop — M3</text>
+          <text x="38" y="278" font-size="17">• attention Q·K·V — M4, M5</text>
+          <text x="38" y="302" font-size="17">• pretrain &amp; fine-tune — M6–M8</text>
+          <text x="38" y="326" font-size="17">• MiniLM &amp; GLiNER — M9, M10</text>
+          <text x="352" y="206" font-size="17">• sampling, KV cache — M11</text>
+          <text x="352" y="230" font-size="17">• quantization, safety — M11</text>
+          <text x="352" y="254" font-size="17">• benchmarks, reasoning — M11</text>
+          <text x="352" y="278" font-size="17">• RAG internals, HNSW — M12.1</text>
+          <text x="352" y="302" font-size="17">• reranking, RAG eval — M12.2–3</text>
+          <text x="352" y="326" font-size="17">• tool calling, agents — M12.4</text>
+        </g>
+      </g>
+      <g id="g-punch" class="sp-hide">
+        <rect x="20" y="360" width="610" height="34" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="325" y="383" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">zero black boxes remain. You can draw the whole thing.</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-glass-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-glass svg",
+        caption: "#fig-glass-cap",
+        steps: [
+          { caption: "Day one: your RAG pipeline, four boxes, three of them opaque. Text goes in, an answer comes out, and the middle was mystery." },
+          { caption: "The embedder opens: MiniLM is a distilled, contrastively-trained, mean-pooled transformer — vectors (M1), attention (M5), sentence embeddings (M9). Fully yours.", hide: ["#g-embed"], show: ["#g-r-embed"], holdMs: 5800 },
+          { caption: "Retrieval opens: cosine similarity (M1.2) over an HNSW index with chunking and hybrid search (M12) — a vector DB, demystified to a dot product plus a graph.", hide: ["#g-search"], show: ["#g-r-search"], holdMs: 5800 },
+          { caption: "The LLM opens: a stack of transformer blocks (M5), pretrained and fine-tuned (M6–M8), generating with sampling and a KV cache (M11). No magic left inside.", hide: ["#g-llm"], show: ["#g-r-llm"], holdMs: 5800 },
+          { caption: "And here's everything, box by box, mapped to the module that cracked it open — the entire middle, accounted for.", show: ["#g-ledger"], holdMs: 6400 },
+          { caption: "The black boxes are gone. You didn't just learn to USE these systems — you can now reason about, debug, evaluate, and rebuild every piece.", show: ["#g-punch"], holdMs: 6200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The twelve interview themes, and where each lives</h2>
+
+  <p>
+    These are the questions ML and applied-AI interviews return to again and again.
+    Each links to the page where you built the answer from first principles — and
+    the full cross-index of every interview question in the course lives on the
+    <a href="../interview-index.html">Interview Index</a> page.
+  </p>
+
+  <ol>
+    <li><strong>Why embeddings beat one-hot / what a vector "means"</strong> →
+      <a href="../01-math/vectors-are-meaning.html">M1.1</a>,
+      <a href="../02-embeddings/one-hot-and-why-it-fails.html">M2.1</a></li>
+    <li><strong>Explain self-attention (Q, K, V) end to end</strong> →
+      <a href="../05-transformer/self-attention-qkv.html">M5.3</a>,
+      <a href="../05-transformer/multi-head-attention.html">M5.4</a></li>
+    <li><strong>Why residuals and LayerNorm make deep transformers trainable</strong> →
+      <a href="../03-neural-nets/backprop-intuition.html">M3.4</a>,
+      <a href="../05-transformer/residuals-layernorm-ffn.html">M5.5</a></li>
+    <li><strong>BERT vs GPT vs T5 — architecture and when to use each</strong> →
+      <a href="../05-transformer/encoder-vs-decoder-vs-both.html">M5.8</a>,
+      <a href="../06-model-families/the-model-zoo-map.html">M6.5</a></li>
+    <li><strong>How pretraining + fine-tuning splits the economics</strong> →
+      <a href="../06-model-families/pretraining-the-big-idea.html">M6.1</a>,
+      <a href="../08-fine-tuning/transfer-learning-and-heads.html">M8.1</a></li>
+    <li><strong>Fine-tune vs RAG vs prompt — the decision</strong> →
+      <a href="../08-fine-tuning/finetune-vs-rag-vs-prompt.html">M8.6</a></li>
+    <li><strong>LoRA / QLoRA — how and why they work</strong> →
+      <a href="../08-fine-tuning/lora-and-peft.html">M8.5</a></li>
+    <li><strong>Model memory math and inference economics</strong> →
+      <a href="../07-compute-and-scale/model-memory-math.html">M7.2</a>,
+      <a href="../07-compute-and-scale/inference-economics.html">M7.5</a></li>
+    <li><strong>How sentence embeddings are trained (contrastive / MNR)</strong> →
+      <a href="../09-sentence-embeddings/contrastive-training-mnr.html">M9.3</a>,
+      <a href="../09-sentence-embeddings/siamese-networks-sbert.html">M9.2</a></li>
+    <li><strong>Evaluation everywhere — F1, recall@k, faithfulness, LLM-as-judge</strong> →
+      <a href="../03-neural-nets/measuring-models.html">M3.6</a>,
+      <a href="../09-sentence-embeddings/evaluating-and-tuning-embeddings.html">M9.5</a>,
+      <a href="../11-llm-era/llm-benchmarks-and-evaluation.html">M11.4</a>,
+      <a href="../12-your-stack/rag-evaluation.html">M12.3</a></li>
+    <li><strong>Sampling, context/KV cache, quantization, reasoning</strong> →
+      <a href="../11-llm-era/sampling-temperature-top-p.html">M11.1</a>,
+      <a href="../11-llm-era/context-windows-and-kv-cache.html">M11.2</a>,
+      <a href="../11-llm-era/reasoning-and-test-time-compute.html">M11.5</a></li>
+    <li><strong>RAG internals, reranking, prompt injection, agents</strong> →
+      <a href="../12-your-stack/rag-internals.html">M12.1</a>,
+      <a href="../12-your-stack/reranking-and-retrieval-quality.html">M12.2</a>,
+      <a href="../11-llm-era/safety-and-guardrails.html">M11.6</a>,
+      <a href="../12-your-stack/tool-calling-and-agents.html">M12.4</a></li>
+  </ol>
+
+  <h2>Where to go deeper: the papers, in reading order</h2>
+
+  <p>
+    You can now read the primary literature — the actual papers, not summaries of
+    them. Each is listed with the module that prepared you for it; read after that
+    module and the paper will feel like a review, not a wall.
+  </p>
+
+  <ul>
+    <li><strong>"Efficient Estimation of Word Representations" (word2vec, 2013)</strong> — after M2. The contrastive idea, at the source.</li>
+    <li><strong>"Attention Is All You Need" (2017)</strong> — after M5. The transformer paper; you now know every equation in it.</li>
+    <li><strong>"BERT" (2018)</strong> — after M6.2. Masked LM and the encoder era.</li>
+    <li><strong>"Language Models are Few-Shot Learners" (GPT-3, 2020)</strong> — after M6.3. Scale and in-context learning.</li>
+    <li><strong>"Sentence-BERT" (2019)</strong> — after M9.2. The bi-encoder that made RAG possible.</li>
+    <li><strong>"MiniLM" (2020)</strong> — after M9.4. The distillation behind your embedder.</li>
+    <li><strong>"Training Compute-Optimal LLMs" (Chinchilla, 2022)</strong> — after M7.4. The scaling laws.</li>
+    <li><strong>"LoRA" (2021)</strong> — after M8.5. Low-rank fine-tuning.</li>
+    <li><strong>"GLiNER" (2023)</strong> — after M10.2. NER as similarity, your second loop-closer.</li>
+    <li><strong>"DeepSeek-R1" (2025)</strong> — after M11.5. Reasoning via RL on verifiable rewards, in the open.</li>
+  </ul>
+
+  <div class="build callout">
+    <div class="co-head">Your three-project portfolio</div>
+    <p>
+      The capstones you built across this course are a portfolio. Polished and
+      written up, they demonstrate exactly the "missing middle" most applied-AI
+      candidates can't show:
+    </p>
+    <ul>
+      <li><strong>A fine-tuned domain embedder</strong> (M9.5): all-MiniLM fine-tuned
+        with MNR loss on your own pairs, with recall@5 before/after — proves you
+        understand embeddings deeply enough to improve them, not just call them.</li>
+      <li><strong>A from-scratch RAG + reranker with a real eval harness</strong>
+        (M12.1–12.3): retrieval, two-stage reranking, and a golden-set evaluation
+        splitting retrieval from generation — proves you can build <em>and measure</em>
+        a production-shaped system.</li>
+      <li><strong>A framework-free agent over that RAG</strong> (M12.4): a ReAct loop
+        with two tools from the raw API — proves you understand agents down to the
+        token, not just the SDK.</li>
+    </ul>
+    <p>
+      Write each up with the numbers and one diagram (you can draw them now). Three
+      projects, each with a metric and a mechanism you can explain to first
+      principles, is a stronger signal than a dozen tutorial clones.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    The middle was never magic — it was <strong>vectors, attention, gradients,
+    scale, and measurement</strong>, composed. You began this course able to
+    <em>use</em> MiniLM, GLiNER, RAG, and agents; you finish able to explain, debug,
+    evaluate, and rebuild every one of them from the dot product up. That is the
+    difference between someone who calls the tools and someone who understands the
+    machine. You are now the second kind of engineer.
+  </p>
+
+  <div class="connect callout">
+    <div class="co-head">Where you are</div>
+    <p>
+      This is the last page of the course. From here: read the papers above in order,
+      polish the three portfolio projects, and use the
+      <a href="../interview-index.html">Interview Index</a> and
+      <a href="../glossary.html">Glossary</a> to keep the whole map fresh. Every box
+      is glass now. Go build something only someone who can see inside would attempt.
+    </p>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

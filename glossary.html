@@ -13,11 +13,15 @@
   <p>Every important term from the course, A–Z, each linking back to the page that teaches it. This list grows as modules are published.</p>
 
   <h2>A</h2>
+  <p><strong>Agent (ReAct loop)</strong> — an LLM in a Reason→Act→Observe loop: it reasons, emits a tool call, your runtime executes it and feeds the result back as tokens, repeat until a final answer. A for-loop around a model with tools. → <a href="12-your-stack/tool-calling-and-agents.html">Tool Calling &amp; Agents</a></p>
+  <p><strong>ANN (approximate nearest neighbor)</strong> — trading a sliver of recall for a huge speedup when searching millions of vectors; HNSW is the common algorithm behind vector databases. → <a href="12-your-stack/rag-internals.html">RAG Internals</a></p>
   <p><strong>Anisotropy</strong> — raw BERT token vectors huddling in a narrow cone, so every pair of sentences scores "similar"; the reason mean-pooled raw BERT retrieves poorly and contrastive fine-tuning exists. → <a href="09-sentence-embeddings/from-tokens-to-a-sentence-vector.html">From Tokens to a Sentence Vector</a></p>
   <p><strong>Attention</strong> — score a query against every key (dot products), softmax into weights, blend the values: a differentiable, learnable lookup. The core mechanism of modern AI. → <a href="04-sequences-attention/attention-is-born.html">Attention Is Born</a></p>
   <p><strong>Autoregressive generation</strong> — produce a token, append it, run again: one full model pass per output token. Why LLMs stream. → <a href="05-transformer/decoder-masking-and-generation.html">Decoder, Masking &amp; Generation</a></p>
 
   <h2>B</h2>
+  <p><strong>BM25</strong> — the modern heir of TF-IDF: a lexical, exact-term ranking function; paired with dense vectors in hybrid search to catch part numbers, codes, and rare names embeddings miss. → <a href="12-your-stack/rag-internals.html">RAG Internals</a></p>
+  <p><strong>Benchmark contamination</strong> — test items leaking into training data, so a model memorizes answers it appears to reason toward; the reason to treat any public benchmark number as an upper bound. → <a href="11-llm-era/llm-benchmarks-and-evaluation.html">LLM Benchmarks &amp; Evaluation</a></p>
   <p><strong>BPE (Byte-Pair Encoding)</strong> — build a vocabulary by repeatedly merging the most frequent adjacent pair; frequent words stay whole, everything else spells out of pieces. → <a href="05-transformer/tokenization-bpe-wordpiece.html">Tokenization</a></p>
   <p><strong>Bias</strong> — the learned vector added after a layer's matrix multiply (the +b in Wx + b); lets the layer shift space, not just warp it. → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
   <p><strong>Base vs instruct checkpoint</strong> — raw pretrained text-continuer vs the same weights SFT'd (+preference-tuned) into an assistant; confusing them is the classic model-hub mistake. → <a href="08-fine-tuning/instruction-tuning-sft.html">Instruction Tuning (SFT)</a></p>
@@ -31,6 +35,9 @@
   <p><strong>Chinchilla ratio</strong> — compute-optimal training wants ~20 tokens per parameter; modern models deliberately overtrain far past it for cheaper serving. → <a href="07-compute-and-scale/scaling-laws-and-chinchilla.html">Scaling Laws &amp; Chinchilla</a></p>
   <p><strong>Chat template</strong> — the serialization format (special tokens, role headers) that turns your messages array into the token stream the model was actually trained on. → <a href="08-fine-tuning/instruction-tuning-sft.html">Instruction Tuning (SFT)</a></p>
   <p><strong>Causal mask</strong> — the −∞ staircase in attention scores that blocks looking at future tokens; the one difference between BERT's body and GPT's. → <a href="05-transformer/decoder-masking-and-generation.html">Decoder, Masking &amp; Generation</a></p>
+  <p><strong>Chain-of-thought (CoT)</strong> — prompting a model to emit intermediate steps; because compute per token is fixed, written steps buy extra forward passes and turn the context window into working memory. → <a href="11-llm-era/reasoning-and-test-time-compute.html">Reasoning &amp; Test-Time Compute</a></p>
+  <p><strong>Context window</strong> — the maximum tokens a model can attend over at once; finite because attention cost grows as n² and the KV cache grows linearly with it. → <a href="11-llm-era/context-windows-and-kv-cache.html">Context Windows &amp; the KV Cache</a></p>
+  <p><strong>Cross-encoder / reranker</strong> — reads query and document together with full attention for a precise relevance score; too slow to run on a whole corpus, so it reranks the bi-encoder's top ~50. → <a href="12-your-stack/reranking-and-retrieval-quality.html">Reranking &amp; Retrieval Quality</a></p>
   <p><strong>Cross-attention</strong> — attention where queries come from the decoder and keys/values from the encoder's output; how translation models and Whisper consult their input. → <a href="05-transformer/encoder-vs-decoder-vs-both.html">Encoder vs Decoder vs Both</a></p>
   <p><strong>Contrastive learning</strong> — training by pulling positive pairs together and pushing negatives apart in embedding space; powers word2vec, sentence-transformers, CLIP, and RAG retrievers. → <a href="02-embeddings/negative-sampling.html">Negative Sampling</a></p>
   <p><strong>Cross-entropy</strong> — the loss −log P(truth): a surprise meter that punishes confident mistakes hardest. What LLMs train on. → <a href="03-neural-nets/softmax-and-cross-entropy.html">Softmax &amp; Cross-Entropy</a></p>
@@ -50,6 +57,9 @@
   <p><strong>Embedding</strong> — a learned vector that represents meaning, placed so that similar things are near each other. → <a href="01-math/vectors-are-meaning.html">Vectors Are Meaning</a></p>
 
   <h2>G</h2>
+  <p><strong>GQA (grouped-query attention)</strong> — groups of query heads sharing one key/value head, shrinking the KV cache several-fold with little quality loss; why 128k contexts became affordable. → <a href="11-llm-era/context-windows-and-kv-cache.html">Context Windows &amp; the KV Cache</a></p>
+  <p><strong>GGUF / GPTQ / AWQ</strong> — quantized-model file formats: GGUF for local CPU/GPU (llama.cpp, Ollama), GPTQ/AWQ for GPU serving via calibration-based 4-bit. → <a href="11-llm-era/quantization-and-inference-stack.html">Quantization &amp; the Inference Stack</a></p>
+  <p><strong>Grounding check</strong> — verifying after generation that every claim is supported by the sources; a safety guardrail against hallucination and injection, and the faithfulness metric in disguise. → <a href="11-llm-era/safety-and-guardrails.html">Safety, Injection &amp; Guardrails</a></p>
   <p><strong>GLiNER</strong> — zero-shot NER by matching: entity-type names enter the encoder with the text, spans and labels meet in one embedding space, a thresholded similarity grid extracts entities. New type = new string. → <a href="10-ner/gliner-architecture.html">GLiNER's Architecture</a></p>
   <p><strong>Gradient accumulation / checkpointing</strong> — big-batch math on small VRAM (sum micro-batch gradients) / trade ~30% compute for activation memory (recompute in backward). → <a href="07-compute-and-scale/training-at-scale.html">Training at Scale</a></p>
   <p><strong>Gradient (mini-batch / SGD)</strong> — real training estimates the slope on a small random batch instead of the whole dataset: noisier, vastly cheaper, and the noise even helps. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
@@ -57,9 +67,16 @@
   <p><strong>Gradient descent</strong> — repeat: measure the slope, step downhill. The algorithm behind all model training. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
 
   <h2>F</h2>
+  <p><strong>Faithfulness (groundedness)</strong> — the fraction of an answer's claims supported by the retrieved context; the direct, measurable counter to hallucination and the key RAG generation metric. → <a href="12-your-stack/rag-evaluation.html">RAG Evaluation</a></p>
+  <p><strong>FlashAttention</strong> — computes exact attention without materializing the n×n matrix in slow memory, tiling through fast on-chip SRAM; same result, far less memory traffic. → <a href="11-llm-era/quantization-and-inference-stack.html">Quantization &amp; the Inference Stack</a></p>
+  <p><strong>Function calling / tool calling</strong> — the model generates JSON naming a tool and arguments; your runtime parses and executes it, feeding the result back as tokens. The model never executes anything itself. → <a href="12-your-stack/tool-calling-and-agents.html">Tool Calling &amp; Agents</a></p>
   <p><strong>FFN (feed-forward network)</strong> — the per-token expand→GELU→compress block after attention; holds ~⅔ of a transformer's parameters and most of its stored facts. → <a href="05-transformer/residuals-layernorm-ffn.html">Residuals, LayerNorm &amp; FFN</a></p>
 
   <h2>H</h2>
+  <p><strong>Hallucination</strong> — confident, fluent, unsupported output; a structural consequence of the next-token objective rewarding plausibility, not truth. Managed by grounding, not by prompting harder. → <a href="11-llm-era/safety-and-guardrails.html">Safety, Injection &amp; Guardrails</a></p>
+  <p><strong>HNSW</strong> — a layered navigable small-world graph: enter at a sparse top layer of long-range "highways", greedily hop toward the query, descend to denser layers; ~log(N) hops to find nearest neighbors. → <a href="12-your-stack/rag-internals.html">RAG Internals</a></p>
+  <p><strong>Hybrid search</strong> — fusing dense-vector retrieval (meaning) with BM25 lexical retrieval (exact terms) to cover each method's blind spot. → <a href="12-your-stack/rag-internals.html">RAG Internals</a></p>
+  <p><strong>HyDE</strong> — embedding an LLM-written hypothetical answer instead of the terse question, since a fake answer sits nearer real documents in vector space. → <a href="12-your-stack/reranking-and-retrieval-quality.html">Reranking &amp; Retrieval Quality</a></p>
   <p><strong>Hard negatives</strong> — near-miss non-matches (same topic, wrong answer) deliberately added to contrastive batches; they teach fine distinctions that random negatives never force. → <a href="09-sentence-embeddings/contrastive-training-mnr.html">Contrastive Training &amp; MNR Loss</a></p>
 
   <h2>I</h2>
@@ -67,9 +84,12 @@
   <p><strong>In-context learning</strong> — examples in the prompt inducing task behavior with zero weight updates; emerged with GPT-3 scale, powers few-shot prompting and RAG. → <a href="06-model-families/gpt-and-causal-lm.html">GPT &amp; Causal LM</a></p>
 
   <h2>K</h2>
+  <p><strong>KV cache</strong> — storing past tokens' key/value vectors so each generated token computes only its own QKV; makes chat fast, but grows ~128 KB/token and is the real reason long context is expensive. → <a href="11-llm-era/context-windows-and-kv-cache.html">Context Windows &amp; the KV Cache</a></p>
   <p><strong>KV / Q (query, key, value)</strong> — a token's three learned roles: what I seek, what I advertise, what I hand over. Attention = softmax(QKᵀ/√d)·V. → <a href="05-transformer/self-attention-qkv.html">Self-Attention: Q, K, V</a></p>
 
   <h2>L</h2>
+  <p><strong>LLM-as-judge</strong> — using a strong model to grade open-ended output; works well but carries position, verbosity, and self-preference biases you correct by swapping orders and using a judge from another model family. → <a href="11-llm-era/llm-benchmarks-and-evaluation.html">LLM Benchmarks &amp; Evaluation</a></p>
+  <p><strong>Lost in the middle</strong> — the U-shaped recall of long contexts: models remember the start and end well and sag in the middle, so put your best retrieved chunks at the edges. → <a href="11-llm-era/context-windows-and-kv-cache.html">Context Windows &amp; the KV Cache</a></p>
   <p><strong>LayerNorm</strong> — re-center and re-scale each token's vector (then learned γ, β); the thermostat keeping hundreds of residual additions numerically sane. → <a href="05-transformer/residuals-layernorm-ffn.html">Residuals, LayerNorm &amp; FFN</a></p>
   <p><strong>LoRA / QLoRA</strong> — freeze W, train a thin low-rank bypass B·A added residual-style (~0.5% of params); QLoRA holds the frozen base in 4-bit — 8B fine-tuning on a free GPU. → <a href="08-fine-tuning/lora-and-peft.html">LoRA, QLoRA &amp; PEFT</a></p>
   <p><strong>Language model</strong> — a machine assigning probabilities to the next token given a prefix; every LLM capability is this task in a loop. → <a href="04-sequences-attention/language-modeling.html">Language Modeling &amp; Perplexity</a></p>
@@ -79,6 +99,8 @@
   <p><strong>Loss</strong> — a single number scoring how wrong the model currently is; training exists to push it down. → <a href="01-math/slopes-and-gradients.html">Slopes, Gradients &amp; Learning</a></p>
 
   <h2>M</h2>
+  <p><strong>MCP (Model Context Protocol)</strong> — a standard for how tools describe themselves and get called, so a tool written once works with any MCP-speaking agent. Plumbing, not new intelligence. → <a href="12-your-stack/tool-calling-and-agents.html">Tool Calling &amp; Agents</a></p>
+  <p><strong>MMLU / GSM8K / HumanEval / Arena</strong> — the headline LLM benchmarks: knowledge MCQ / math reasoning / executed-code pass@k / human-preference Elo. Each measures performance on itself, nothing more. → <a href="11-llm-era/llm-benchmarks-and-evaluation.html">LLM Benchmarks &amp; Evaluation</a></p>
   <p><strong>MLM (masked language modeling)</strong> — hide 15% of tokens (with the 80/10/10 twist), predict from both sides; BERT-family pretraining, ancestor of MiniLM and GLiNER. → <a href="06-model-families/bert-and-masked-lm.html">BERT &amp; Masked LM</a></p>
   <p><strong>Mixed precision</strong> — compute in bf16 for speed, keep fp32 master weights for stable updates; why training memory includes two copies of the model. → <a href="07-compute-and-scale/training-at-scale.html">Training at Scale</a></p>
   <p><strong>MNR loss (MultipleNegativesRankingLoss)</strong> — cross-entropy over a batch's in-batch similarity grid: each query must rank its own positive above everyone else's. The loss that trained all-MiniLM. → <a href="09-sentence-embeddings/contrastive-training-mnr.html">Contrastive Training &amp; MNR Loss</a></p>
@@ -98,6 +120,7 @@
   <p><strong>Overfitting</strong> — memorizing training data instead of learning patterns; visible as train loss falling while validation loss rises. → <a href="03-neural-nets/gradient-descent-training-loop.html">The Training Loop</a></p>
 
   <h2>P</h2>
+  <p><strong>Prompt injection</strong> — malicious instructions hidden in content the model reads (user input, or retrieved documents — indirect injection); since instructions and data are one token stream, no prompt wording fully prevents it. Design for it. → <a href="11-llm-era/safety-and-guardrails.html">Safety, Injection &amp; Guardrails</a></p>
   <p><strong>Perplexity</strong> — e^loss: the number of tokens a language model effectively hesitates between per step. Lower = better. → <a href="04-sequences-attention/language-modeling.html">Language Modeling &amp; Perplexity</a></p>
   <p><strong>Prefill vs decode</strong> — prompt processed in one parallel compute-bound pass, then output generated token-by-token bandwidth-bound; why output tokens cost 3–5× input. → <a href="07-compute-and-scale/inference-economics.html">Inference Economics</a></p>
   <p><strong>Pretraining</strong> — self-supervised prediction over a curated internet-scale corpus, paid once at $10M+ scale, producing the base everyone adapts. → <a href="06-model-families/pretraining-the-big-idea.html">Pretraining: The Big Idea</a></p>
@@ -106,7 +129,12 @@
   <p><strong>Precision / recall / F1</strong> — "when I flag, am I right?" / "do I find them all?" / their strict harmonic mean. The measurement kit for imbalanced problems. → <a href="03-neural-nets/measuring-models.html">Measuring Models</a></p>
   <p><strong>Parameter</strong> — one learned number inside a model. "7B model" = seven billion of these. → <a href="01-math/matrices-transform.html">Matrices Transform Meaning</a></p>
 
+  <h2>Q</h2>
+  <p><strong>Quantization</strong> — storing weights with fewer bits (int8, int4) by snapping each to a coarser number line; ~4× smaller and faster to stream at ~1–3% quality cost, because billions of redundant weights average the rounding noise away. → <a href="11-llm-era/quantization-and-inference-stack.html">Quantization &amp; the Inference Stack</a></p>
+
   <h2>R</h2>
+  <p><strong>RAG (retrieval-augmented generation)</strong> — embed chunks offline, embed the query online, cosine-search for the top chunks, paste them into the prompt, and generate grounded. Every box is a course module. → <a href="12-your-stack/rag-internals.html">RAG Internals</a></p>
+  <p><strong>Reranking (two-stage retrieval)</strong> — a bi-encoder recalls the top ~50 over millions, then a cross-encoder precisely reorders to the top ~5; the highest-ROI, no-retraining RAG upgrade. → <a href="12-your-stack/reranking-and-retrieval-quality.html">Reranking &amp; Retrieval Quality</a></p>
   <p><strong>Recall@k</strong> — the fraction of queries whose relevant document appears in the top k results; the single most load-bearing RAG metric (if it's not in the top k, the LLM never sees it). → <a href="09-sentence-embeddings/evaluating-and-tuning-embeddings.html">Evaluating &amp; Tuning Embeddings</a></p>
   <p><strong>Reward hacking</strong> — a policy exploiting its reward model's blind spots (sycophancy, padding, gibberish that scores well); the KL leash exists to prevent it. → <a href="08-fine-tuning/rlhf-and-dpo.html">RLHF &amp; DPO</a></p>
   <p><strong>RLHF</strong> — train a reward model from human rankings, then optimize the LLM against it with PPO under a KL penalty to its SFT self; the source of assistant personality. → <a href="08-fine-tuning/rlhf-and-dpo.html">RLHF &amp; DPO</a></p>
@@ -118,6 +146,9 @@
   <p><strong>SFT (supervised fine-tuning)</strong> — training on (instruction, response) pairs with loss on the response; converts a text-continuer into an assistant. → <a href="08-fine-tuning/instruction-tuning-sft.html">Instruction Tuning (SFT)</a></p>
   <p><strong>SBERT / siamese network</strong> — twin encoders with shared weights producing comparable sentence vectors; the architecture that made pre-embedding a corpus (and therefore RAG) possible. → <a href="09-sentence-embeddings/siamese-networks-sbert.html">Siamese Networks &amp; SBERT</a></p>
   <p><strong>Span-level F1</strong> — NER's scoreboard: a predicted entity counts only on exact boundary + type match; partial overlap = false positive AND false negative. → <a href="10-ner/ner-as-token-classification.html">NER as Token Classification</a></p>
+  <p><strong>Sampling (temperature / top-p)</strong> — reshaping the model's output distribution before drawing a token: temperature divides logits (sharp vs flat), top-p keeps the smallest set summing to p. The API dials, demystified. → <a href="11-llm-era/sampling-temperature-top-p.html">Sampling: Temperature &amp; Top-p</a></p>
+  <p><strong>Self-consistency</strong> — sampling N chains of thought and taking the majority answer; independent errors cancel, correct paths converge. Ensemble logic for reasoning. → <a href="11-llm-era/reasoning-and-test-time-compute.html">Reasoning &amp; Test-Time Compute</a></p>
+  <p><strong>Speculative decoding</strong> — a small draft model proposes tokens, the big model verifies them in one parallel pass; 2–3× faster with mathematically identical output. → <a href="11-llm-era/quantization-and-inference-stack.html">Quantization &amp; the Inference Stack</a></p>
   <p><strong>Self-attention</strong> — a sentence attending to itself: every token queries every token, updating each vector with weighted context. The bank-problem killer. → <a href="05-transformer/self-attention-qkv.html">Self-Attention: Q, K, V</a></p>
   <p><strong>Seq2seq bottleneck</strong> — forcing a whole input through one fixed-size vector between encoder and decoder; its measured failure gave birth to attention. → <a href="04-sequences-attention/seq2seq-and-the-bottleneck.html">Seq2Seq &amp; the Bottleneck</a></p>
   <p><strong>Skip-gram</strong> — word2vec's flavor where the center word predicts its context words via two embedding matrices and a dot product. → <a href="02-embeddings/word2vec-skip-gram.html">word2vec: Skip-Gram Internals</a></p>
@@ -128,6 +159,9 @@
   <h2>T</h2>
   <p><strong>Token / tokenization</strong> — the subword units models actually read; all context limits and prices are counted in them. ~¾ of an English word each. → <a href="05-transformer/tokenization-bpe-wordpiece.html">Tokenization</a></p>
   <p><strong>Temperature</strong> — a divisor applied to logits before softmax: low = sharp/deterministic, high = flat/creative. The API parameter, demystified. → <a href="03-neural-nets/softmax-and-cross-entropy.html">Softmax &amp; Cross-Entropy</a></p>
+  <p><strong>Test-time compute</strong> — spending more inference tokens (thinking) on hard questions for better answers; a second scaling axis beyond training compute. → <a href="11-llm-era/reasoning-and-test-time-compute.html">Reasoning &amp; Test-Time Compute</a></p>
+  <p><strong>Top-p (nucleus sampling)</strong> — keep the smallest set of tokens whose probabilities sum to p, then sample; adapts to the model's confidence per token, unlike fixed top-k. → <a href="11-llm-era/sampling-temperature-top-p.html">Sampling: Temperature &amp; Top-p</a></p>
+  <p><strong>Two-stage retrieval</strong> — see Reranking: cheap recall then expensive precision. → <a href="12-your-stack/reranking-and-retrieval-quality.html">Reranking &amp; Retrieval Quality</a></p>
 
   <p><strong>Transfer learning</strong> — borrowed pretrained body + new task head + a freezing dial; why 500 labels can beat 25,000. → <a href="08-fine-tuning/transfer-learning-and-heads.html">Transfer Learning &amp; Heads</a></p>
 

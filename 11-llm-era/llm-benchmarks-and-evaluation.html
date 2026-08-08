@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LLM Benchmarks &amp; Evaluation — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="11-llm-era/llm-benchmarks-and-evaluation">
+<main id="content">
+
+  <h1>LLM Benchmarks &amp; Evaluation</h1>
+
+  <p>
+    "Model X scores 88.7 on MMLU." You've read a hundred sentences like that —
+    time to know what's actually being measured, how the numbers get inflated, and
+    why the leaderboard's winner is routinely the wrong model for <em>your</em> task.
+    This is the measurement thread of the course (M3.6 → perplexity → MTEB → span-F1)
+    arriving at its hardest case: how do you score a model whose output is free text?
+  </p>
+
+  <h2>The benchmark landscape, decoded</h2>
+
+  <p>
+    Four families cover most headline numbers. <strong>MMLU</strong> — 14k multiple-choice
+    questions across 57 subjects (law, medicine, math…); measures broad knowledge;
+    scored by exact letter match. <strong>GSM8K / MATH</strong> — grade-school and
+    competition math word problems; measures multi-step reasoning; scored by final
+    answer. <strong>HumanEval</strong> — 164 Python function specs; the model writes
+    code, <em>unit tests execute it</em>; scored pass@k (does any of k samples pass?) —
+    the most honest of the bunch because running code can't be sweet-talked.
+    <strong>MT-Bench / Chatbot Arena</strong> — open-ended chat quality; no ground
+    truth exists, so either a strong LLM grades responses (MT-Bench) or thousands of
+    humans vote in blind A/B battles feeding an Elo rating (Arena — chess ranking
+    math applied to chatbots, the hardest number to game because the test set is
+    live humans).
+  </p>
+
+  <figure class="anim" id="fig-bench">
+    <div class="fig-title">Animation · What a benchmark question actually looks like</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-bench-t">
+      <title id="fig-bench-t">An MMLU multiple choice question and a HumanEval coding task being scored</title>
+      <!-- MMLU card -->
+      <g id="b-mmlu">
+        <rect x="40" y="30" width="560" height="120" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+        <text x="60" y="58" font-size="17" fill="#1d4ed8" font-weight="700">MMLU · college medicine</text>
+        <text x="60" y="84" font-size="17" class="sv-ink">"Which vitamin deficiency causes scurvy?"</text>
+        <g class="mono">
+          <text x="60"  y="112" font-size="17" fill="#64748b">(A) Vitamin A</text>
+          <text x="220" y="112" font-size="17" fill="#64748b">(B) Vitamin B12</text>
+          <text x="400" y="112" font-size="17" fill="#64748b">(C) Vitamin C</text>
+          <text x="60"  y="136" font-size="17" fill="#64748b">(D) Vitamin D</text>
+        </g>
+      </g>
+      <g id="b-mmlu-ans" class="sp-hide">
+        <rect x="392" y="94" width="140" height="26" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+        <text x="400" y="112" font-size="17" class="mono" fill="#047857" font-weight="700">(C) Vitamin C ✓</text>
+        <text x="540" y="136" font-size="17" fill="#047857" font-weight="700">+1</text>
+      </g>
+      <!-- HumanEval card -->
+      <g id="b-he" class="sp-hide">
+        <rect x="40" y="166" width="560" height="130" rx="14" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="60" y="194" font-size="17" fill="#334155" font-weight="700">HumanEval · write the function</text>
+        <g class="mono">
+          <text x="60" y="220" font-size="17" fill="#64748b">def is_palindrome(s): """True if s reads the same reversed"""</text>
+          <text x="60" y="246" font-size="17" class="sv-ink">    return s == s[::-1]          # ← model's code</text>
+          <text x="60" y="272" font-size="17" fill="#64748b">assert is_palindrome("racecar") — tests RUN the code</text>
+        </g>
+      </g>
+      <g id="b-he-pass" class="sp-hide">
+        <rect x="472" y="252" width="112" height="30" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+        <text x="528" y="273" text-anchor="middle" font-size="17" class="mono" fill="#047857" font-weight="700">3/3 pass ✓</text>
+      </g>
+      <!-- scoreboard -->
+      <g id="b-score" class="sp-hide">
+        <rect x="40" y="312" width="560" height="42" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="320" y="332" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">14,042 questions later: "MMLU 88.7" — one number,</text>
+        <text x="320" y="350" text-anchor="middle" font-size="17" fill="#b45309">an average over 57 subjects of wildly varying difficulty</text>
+      </g>
+      <g id="b-warn" class="sp-hide">
+        <rect x="40" y="362" width="560" height="34" rx="10" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="320" y="385" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">it measures recall under exam conditions — not your use case</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-bench-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-bench svg",
+        caption: "#fig-bench-cap",
+        steps: [
+          { caption: "An actual MMLU-style item: a knowledge question, four options. The model answers with a letter; exact match scores it. 14k of these = the headline number." },
+          { caption: "Scored: (C), +1 point. Note what this rewards — memorized knowledge and test-taking, in a format almost nothing in production resembles.", show: ["#b-mmlu-ans"], holdMs: 5200 },
+          { caption: "HumanEval is different in kind: the model writes real code, and unit tests EXECUTE it. pass@1 = fraction solved on the first try.", show: ["#b-he"], holdMs: 5600 },
+          { caption: "Tests pass: credit. Execution-based scoring can't be fooled by plausible-looking answers — which is why code benchmarks age best.", show: ["#b-he-pass"], holdMs: 5200 },
+          { caption: "Thousands of items collapse into one decimal. Useful for ranking rough capability tiers; useless as a promise about your workload.", show: ["#b-score"], holdMs: 5600 },
+          { caption: "Hold that skepticism from M9.5's MTEB: a benchmark measures performance ON THE BENCHMARK. Everything else is extrapolation.", show: ["#b-warn"], holdMs: 5600 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Contamination: training on the test</h2>
+
+  <p>
+    Benchmarks are text on the internet. Pretraining corpora are… the internet
+    (M6.1). When test questions leak into training data — verbatim or paraphrased —
+    the model <em>memorizes</em> answers it appears to <em>reason</em> toward, and a
+    public number quietly inflates. Evidence is everywhere: models scoring
+    suspiciously better on GSM8K's public set than on freshly-written problems of
+    identical difficulty (that's exactly why GSM1k was created — a private clean
+    rewrite showing drops of up to 13 points for some models). Defenses: private
+    held-out sets, contamination scans (n-gram overlap between corpus and
+    benchmark), post-cutoff benchmarks built from new material, and live evals
+    (Arena) whose "test set" is tomorrow's users. Rule: treat any public benchmark
+    number as an <em>upper bound</em> on true capability.
+  </p>
+
+  <h2>LLM-as-judge: the grader that has biases</h2>
+
+  <p>
+    For open-ended output there's often no gold answer, and human grading doesn't
+    scale — so we ask a strong LLM to grade. It works surprisingly well
+    (MT-Bench judge agreement with humans ≈ human-human agreement) but the judge has
+    documented, repeatable biases: <strong>position bias</strong> (prefers whichever
+    answer it read first), <strong>verbosity bias</strong> (longer ≈ better, even
+    when padding adds nothing), and <strong>self-preference</strong> (models favor
+    text in their own style, including literally their own outputs). None are fatal;
+    all are correctable-by-design.
+  </p>
+
+  <figure class="anim" id="fig-judge">
+    <div class="fig-title">Animation · Position bias, caught and corrected</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-judge-t">
+      <title id="fig-judge-t">A judge model preferring the first-position answer, then order swapping revealing and fixing the bias</title>
+      <!-- round 1 -->
+      <g id="j-r1">
+        <text x="320" y="34" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">"Which answer is better?"</text>
+        <rect x="50" y="52" width="250" height="70" rx="12" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="175" y="80" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">shown FIRST: Answer A</text>
+        <text x="175" y="104" text-anchor="middle" font-size="17" fill="#1d4ed8">(model Alpha)</text>
+        <rect x="340" y="52" width="250" height="70" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="465" y="80" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">shown second: Answer B</text>
+        <text x="465" y="104" text-anchor="middle" font-size="17" fill="#64748b">(model Beta)</text>
+      </g>
+      <g id="j-v1" class="sp-hide">
+        <rect x="200" y="142" width="240" height="40" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+        <text x="320" y="168" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">judge: "A wins" 🏆</text>
+      </g>
+      <!-- round 2 swapped -->
+      <g id="j-r2" class="sp-hide">
+        <text x="320" y="216" text-anchor="middle" font-size="17" fill="#64748b" font-weight="700">same two answers — order SWAPPED:</text>
+        <rect x="50" y="228" width="250" height="64" rx="12" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="175" y="254" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">shown FIRST: Answer B</text>
+        <text x="175" y="278" text-anchor="middle" font-size="17" fill="#1d4ed8">(model Beta)</text>
+        <rect x="340" y="228" width="250" height="64" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="465" y="254" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">shown second: Answer A</text>
+        <text x="465" y="278" text-anchor="middle" font-size="17" fill="#64748b">(model Alpha)</text>
+      </g>
+      <g id="j-v2" class="sp-hide">
+        <rect x="200" y="304" width="240" height="40" rx="12" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="320" y="330" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">judge: "B wins"?! 🚨</text>
+      </g>
+      <g id="j-fix" class="sp-hide">
+        <rect x="40" y="356" width="560" height="38" rx="12" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+        <text x="320" y="373" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">the fix: judge every pair BOTH ways — count a win only if</text>
+        <text x="320" y="391" text-anchor="middle" font-size="17" fill="#047857">it survives the swap; disagreements score as ties</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-judge-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-judge svg",
+        caption: "#fig-judge-cap",
+        steps: [
+          { caption: "Two models' answers to one prompt, shown to a judge LLM in a fixed order. Judge says: A wins." },
+          { caption: "Judge says A. Fine — unless the judge would have said that about WHATEVER came first.", show: ["#j-v1"], holdMs: 5000 },
+          { caption: "Control experiment: identical answers, order swapped. A fair judge flips its label too (still prefers Alpha's text, now in second position).", show: ["#j-r2"], holdMs: 5400 },
+          { caption: "Instead: 'B wins' — it preferred position one both times. That's position bias, and it's measured at double-digit rates in real judge setups.", show: ["#j-v2"], holdMs: 5600 },
+          { caption: "The standard correction: every comparison runs both orders; only swap-consistent verdicts count. Add verbosity guards and never let a model judge its own family.", show: ["#j-fix"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The eval that actually matters: yours</h2>
+
+  <p>
+    Leaderboard rank answers "which model is generally capable?" Your production
+    question is "which model, at which price, handles <em>my</em> distribution of
+    inputs?" — and no public benchmark contains your tone requirements, your domain
+    vocabulary, or your failure costs. The professional habit (you've built it twice:
+    M9.5 for embeddings, span-F1 for NER) is a <strong>golden set</strong>:
+    20–100 real cases, each with a rubric of checkable criteria — correctness,
+    groundedness ("no claims beyond the provided context"), format compliance.
+    Score with exact checks where possible, LLM-as-judge (swap-corrected) where not.
+    Run it on every model switch, prompt change, and retrieval tweak — it's a unit
+    test suite for behavior, and it converts arguments about vibes into diffs.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Scale of the standard suites: MMLU <strong>~14k questions</strong> (random
+      chance = 25; ~90 is the current frontier); GSM8K <strong>8.5k problems</strong>;
+      HumanEval <strong>164 tasks</strong> (why its scores are noisy — one task ≈ 0.6
+      points); Chatbot Arena <strong>millions of human votes</strong>, where a
+      ~30-point Elo gap ≈ 54% win rate — closer than headlines suggest. MT-Bench's
+      judge agrees with humans ~<strong>80%</strong> of the time, roughly the
+      human-human rate. And the number that matters most here: a 20-question golden
+      set for your chatbot costs about <strong>an afternoon</strong> to build and
+      answers questions no leaderboard can.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      This closes the measurement arc that started with M3.6's "accuracy lies":
+      every layer of the stack got its own honest ruler — F1 for classifiers,
+      perplexity for LMs, recall@k/MTEB for embeddings, span-F1 for NER, and now
+      execution tests, Elo, and swap-corrected judges for LLMs. Same discipline
+      every time: define the metric before you argue, distrust averages, hold out a
+      clean test set. Next page's reasoning models were <em>trained</em> on this
+      page's insight — that verifiable rewards (code that runs, math that checks)
+      are the only graders that can't be charmed.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: a golden-set eval with a swap-corrected judge</div>
+<pre><code>import json, itertools
+from openai import OpenAI          # any chat-completions API works
+client = OpenAI()
+
+golden = json.load(open("golden.json"))   # 20 items you wrote:
+# {"q": "...", "must_contain": ["refund", "14 days"], "context": "..."}
+
+RUBRIC = """Score the ANSWER 1-5 on: (a) factually consistent with CONTEXT
+(b) directly answers QUESTION (c) no unsupported claims. Reply as JSON:
+{"score": n, "unsupported_claims": [...]}"""
+
+def judge(q, ctx, ans):
+    r = client.chat.completions.create(model="gpt-4o", temperature=0,
+        messages=[{"role":"user","content":
+          f"{RUBRIC}\n\nQUESTION: {q}\nCONTEXT: {ctx}\nANSWER: {ans}"}])
+    return json.loads(r.choices[0].message.content)["score"]
+
+scores = []
+for item in golden:
+    ans = my_bot(item["q"])                      # your pipeline
+    hard = all(k.lower() in ans.lower() for k in item["must_contain"])
+    scores.append((hard, judge(item["q"], item["context"], ans)))
+
+print(f"hard-checks passed: {sum(h for h,_ in scores)}/{len(scores)}")
+print(f"mean judge score:   {sum(s for _,s in scores)/len(scores):.2f}")
+</code></pre>
+    <p>
+      Two upgrades that teach the page's lessons firsthand: (1) run the whole eval
+      <em>twice</em> and compare — the variance you see is judge noise, and it's why
+      single-run comparisons under ~5 points of difference are meaningless;
+      (2) for A/B model comparisons, judge each pair in both orders and count only
+      swap-consistent wins. Keep <code>golden.json</code> in git — it's a behavior
+      test suite now.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    A benchmark measures performance on the benchmark: MMLU = knowledge recall,
+    GSM8K = arithmetic reasoning, HumanEval = executed code, Arena = human
+    preference Elo — and contamination inflates anything public.
+    <strong>LLM-as-judge works but carries position, verbosity, and self-preference
+    biases you must design around (swap orders, cap length credit, foreign judge).
+    The eval that decides anything real is a golden set of your own cases, run on
+    every change.</strong>
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>What do MMLU, GSM8K, HumanEval, and Chatbot Arena each actually measure, and which would you trust most?</summary>
+      <div><p>MMLU: broad knowledge recall in multiple-choice form — 57 subjects, exact letter match; measures stored knowledge and exam skill. GSM8K/MATH: multi-step quantitative reasoning, scored on final answer. HumanEval: functional code generation, scored by executing unit tests (pass@k). Arena: open-ended chat preference via blind human A/B votes aggregated into Elo. Trust ranking for real capability: execution-based (HumanEval-style) and live-human (Arena) age best because neither can be satisfied by memorization alone — code must run, and Arena's "test set" is tomorrow's fresh users. Static public text benchmarks (MMLU, GSM8K) are most contamination-prone and should be read as upper bounds.</p></div>
+    </details>
+    <details>
+      <summary>What is benchmark contamination, how does it happen, and how do you detect it?</summary>
+      <div><p>Test items leaking into training corpora — verbatim (benchmark files on GitHub, Q&amp;A sites quoting problems) or paraphrased — so the model memorizes answers rather than deriving them, inflating the public number. Detection: n-gram overlap scans between corpus and benchmark; performance deltas between public sets and privately-rewritten equivalents of matched difficulty (GSM1k found up to ~13-point drops for some models); suspicious verbatim-completion probes (give the question's first half, see if the model completes it word-for-word); and post-training-cutoff benchmarks. Mitigation as a consumer: prefer private/live/execution evals and your own golden set; as a builder: decontaminate training data against known suites.</p></div>
+    </details>
+    <details>
+      <summary>Name the three classic LLM-as-judge biases and a mitigation for each.</summary>
+      <div><p>(1) Position bias — the judge favors the answer shown first (or last, model-dependent). Fix: evaluate every pair in both orders; count only swap-consistent verdicts, treat flips as ties. (2) Verbosity bias — longer answers score higher independent of content. Fix: instruct the rubric to penalize padding, normalize/limit lengths, or spot-check length-vs-score correlation. (3) Self-preference — judges rate their own (or same-family) outputs higher. Fix: use a judge from a different model family than any contestant, or a panel of judges. Plus the general mitigations: pointwise rubrics with concrete criteria instead of raw "which is better," temperature 0, and measuring judge-human agreement on a labeled sample before trusting it at scale.</p></div>
+    </details>
+    <details>
+      <summary>Your team is choosing between two models for a RAG chatbot. Leaderboards put model A 3 MMLU points ahead. What's your evaluation plan?</summary>
+      <div><p>Ignore the 3 points — wrong task (MMLU is closed-book MCQ; RAG answering is grounded generation) and within contamination/noise range. Plan: (1) build a golden set of 30–50 real user questions with retrieved contexts and reference answers/criteria drawn from production logs; (2) define metrics: groundedness (no claims beyond context), answer correctness against the criteria, format compliance, plus latency and cost per query; (3) hard-check what's checkable (must-contain strings, citation validity), LLM-judge the rest with both-order swaps and a judge from a third family; (4) run each model through the identical pipeline (same retrieval, same prompts, T=0), twice, to see judge variance; (5) decide on quality-per-dollar at your traffic, not abstract rank. Document it so the next model release re-runs in an hour.</p></div>
+    </details>
+    <details>
+      <summary>Why is pass@k a better metric shape than accuracy for code models, and what's the catch?</summary>
+      <div><p>pass@k asks: given k sampled attempts, does at least one pass the unit tests? It matches real usage (developers retry / pick from suggestions), rewards models whose samples are diverse enough to cover alternative solutions, and — because scoring is execution-based — is immune to plausible-but-wrong text. Catches: it depends on sampling settings (temperature that maximizes pass@100 hurts pass@1, so published numbers must state k and temperature); tests can be gamed if weak (passing ≠ correct for untested edge cases); small suites (HumanEval = 164 tasks) make single-task noise visible; and training on solutions-in-the-wild contaminates it like any static set — hence fresh-problem suites like LiveCodeBench that only use problems published after the model's cutoff.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

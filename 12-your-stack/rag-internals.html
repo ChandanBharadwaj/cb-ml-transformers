@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG Internals — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="12-your-stack/rag-internals">
+<main id="content">
+
+  <h1>RAG Internals</h1>
+
+  <p>
+    The final module x-rays the system you started this course already using. You
+    built RAG by wiring libraries together; now you can label every box with the
+    module that explains it — and that labeling is the point. When retrieval fails
+    in production, "it's not finding the right chunks" becomes a precise diagnosis
+    with named fixes, not a shrug. Let's walk the pipeline end to end, then build a
+    complete one in ~80 lines with no vector database at all — to prove you know
+    exactly what the database was doing for you.
+  </p>
+
+  <h2>The whole pipeline, every box labeled</h2>
+
+  <p>
+    RAG is two phases. <strong>Offline (indexing), once:</strong> documents →
+    chunk → embed each chunk (M9's all-MiniLM) → store vectors in an index.
+    <strong>Online (query), per question:</strong> embed the query with the
+    <em>same</em> model → find nearest chunk vectors by cosine (M1.2) → paste the
+    top chunks into the prompt (M8.3's template) → the LLM answers, grounded
+    (M11.6). Every arrow is something you've now opened: the embedder is a distilled
+    contrastively-trained bi-encoder (M9), "nearest by cosine" is the dot product of
+    normalized vectors (M1.2), and "answer grounded" is the injection-aware,
+    hallucination-managed generation of M11.
+  </p>
+
+  <figure class="anim" id="fig-pipe">
+    <div class="fig-title">Animation · The RAG pipeline, annotated by module</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-pipe-t">
+      <title id="fig-pipe-t">Offline indexing and online query paths of a RAG system with each stage labeled by its module</title>
+      <text x="150" y="28" text-anchor="middle" font-size="17" fill="#64748b" font-weight="700">OFFLINE · once</text>
+      <!-- offline chain -->
+      <g id="p-off">
+        <rect x="30" y="44" width="100" height="46" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="80" y="66" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">documents</text>
+        <text x="80" y="84" text-anchor="middle" font-size="17" fill="#64748b">(your docs)</text>
+        <rect x="150" y="44" width="100" height="46" rx="10" fill="#eff6ff" stroke="#2563eb"/>
+        <text x="200" y="66" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">chunk</text>
+        <text x="200" y="84" text-anchor="middle" font-size="17" fill="#64748b">§ below</text>
+        <path d="M 130 67 L 148 67" stroke="#94a3b8" stroke-width="2" marker-end="url(#pa)"/>
+      </g>
+      <g id="p-off2" class="sp-hide">
+        <rect x="270" y="44" width="110" height="46" rx="10" fill="#eff6ff" stroke="#2563eb"/>
+        <text x="325" y="66" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">embed</text>
+        <text x="325" y="84" text-anchor="middle" font-size="17" fill="#64748b">MiniLM · M9</text>
+        <path d="M 250 67 L 268 67" stroke="#94a3b8" stroke-width="2" marker-end="url(#pa)"/>
+        <rect x="400" y="44" width="120" height="46" rx="10" fill="#d1fae5" stroke="#059669"/>
+        <text x="460" y="66" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">vector index</text>
+        <text x="460" y="84" text-anchor="middle" font-size="17" fill="#64748b">§ HNSW below</text>
+        <path d="M 380 67 L 398 67" stroke="#94a3b8" stroke-width="2" marker-end="url(#pa)"/>
+      </g>
+      <!-- online chain -->
+      <text x="150" y="150" text-anchor="middle" font-size="17" fill="#64748b" font-weight="700">ONLINE · per query</text>
+      <g id="p-on" class="sp-hide">
+        <rect x="30" y="166" width="100" height="46" rx="10" fill="#fef3c7" stroke="#d97706"/>
+        <text x="80" y="188" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">question</text>
+        <text x="80" y="206" text-anchor="middle" font-size="17" fill="#64748b">user</text>
+        <rect x="150" y="166" width="110" height="46" rx="10" fill="#eff6ff" stroke="#2563eb"/>
+        <text x="205" y="188" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">embed q</text>
+        <text x="205" y="206" text-anchor="middle" font-size="17" fill="#64748b">SAME model</text>
+        <path d="M 130 189 L 148 189" stroke="#94a3b8" stroke-width="2" marker-end="url(#pa)"/>
+      </g>
+      <g id="p-on2" class="sp-hide">
+        <rect x="280" y="166" width="120" height="46" rx="10" fill="#d1fae5" stroke="#059669"/>
+        <text x="340" y="188" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">cosine search</text>
+        <text x="340" y="206" text-anchor="middle" font-size="17" fill="#64748b">M1.2 · top-k</text>
+        <path d="M 260 189 C 268 189, 272 189, 278 189" stroke="#94a3b8" stroke-width="2" marker-end="url(#pa)"/>
+        <path d="M 460 92 C 460 130, 400 150, 360 164" fill="none" stroke="#059669" stroke-width="2" stroke-dasharray="5 4"/>
+      </g>
+      <g id="p-on3" class="sp-hide">
+        <rect x="420" y="166" width="120" height="46" rx="10" fill="#eff6ff" stroke="#2563eb"/>
+        <text x="480" y="188" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">prompt + LLM</text>
+        <text x="480" y="206" text-anchor="middle" font-size="17" fill="#64748b">M8.3 · M11</text>
+        <path d="M 400 189 L 418 189" stroke="#94a3b8" stroke-width="2" marker-end="url(#pa)"/>
+      </g>
+      <g id="p-ans" class="sp-hide">
+        <rect x="180" y="242" width="280" height="44" rx="12" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+        <text x="320" y="270" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">grounded answer + citations</text>
+        <path d="M 480 212 C 480 226, 400 236, 360 242" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#pa)"/>
+      </g>
+      <g id="p-punch" class="sp-hide">
+        <rect x="40" y="306" width="560" height="80" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="320" y="332" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">not one line of this is a black box to you anymore.</text>
+        <text x="320" y="356" text-anchor="middle" font-size="17" fill="#64748b">every arrow has a module number. The rest of this page</text>
+        <text x="320" y="378" text-anchor="middle" font-size="17" fill="#64748b">is the two boxes you built on faith: chunking and the index.</text>
+      </g>
+      <defs>
+        <marker id="pa" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
+      </defs>
+    </svg>
+    <p class="sp-caption" id="fig-pipe-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-pipe svg",
+        caption: "#fig-pipe-cap",
+        steps: [
+          { caption: "Offline, done once: your documents get split into chunks. Chunking is a real design decision — more on it below." },
+          { caption: "Each chunk is embedded by all-MiniLM (M9 — now fully yours) and its vector stored in an index. This is the expensive-once step SBERT's bi-encoder design (M9.2) made possible.", show: ["#p-off2"], holdMs: 5800 },
+          { caption: "Online, per question: the user's query is embedded by the SAME model — it must live in the same vector space as the chunks, or cosine is meaningless.", show: ["#p-on"], holdMs: 5600 },
+          { caption: "Cosine similarity (M1.2) ranks all chunk vectors against the query; the top-k come back. The dashed line: this searches the index built offline.", show: ["#p-on2"], holdMs: 5600 },
+          { caption: "Top chunks are spliced into the prompt template (M8.3) and the LLM generates — grounded, at low temperature, injection-aware (M11).", show: ["#p-on3"], holdMs: 5400 },
+          { caption: "Out comes a grounded, cited answer. Every arrow you just watched has a module behind it.", show: ["#p-ans"], holdMs: 5000 },
+          { caption: "So the only real mysteries left are the two boxes you wired up on trust: how to chunk, and what the vector index does. Those are the rest of this page.", show: ["#p-punch"], holdMs: 6200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Chunking: the decision that quietly caps your quality</h2>
+
+  <p>
+    Chunking is the most underrated dial in RAG, and it's a genuine trade-off.
+    <strong>Too large</strong> and a chunk mixes several topics — its single
+    embedding is a muddy average (M9.1's pooling problem at document scale), so it
+    matches everything weakly and nothing strongly, and it wastes context tokens
+    (M11.2) on irrelevant text. <strong>Too small</strong> and a chunk loses the
+    context that made it meaningful — a sentence saying "it doubled year over year"
+    is useless without knowing what "it" is. Approaches climb a ladder:
+    fixed-size (simplest), <strong>token-aware</strong> (count in tokens, M5.1, so
+    chunks fit budgets exactly), <strong>overlapping</strong> windows (carry
+    ~10–20% into the next chunk so a fact split across a boundary survives), and
+    <strong>semantic</strong> (split on topic shifts using embedding distance — the
+    embedder deciding its own boundaries). Start with ~200–500 token chunks and
+    ~50-token overlap; then, crucially, <em>measure</em> (M9.5, next pages).
+  </p>
+
+  <h2>Indexing: brute force, then the graph that beats it</h2>
+
+  <p>
+    With N chunk vectors, finding the query's nearest neighbors is conceptually a
+    loop: compute cosine against all N, sort, take top-k. That's <strong>brute-force
+    (flat) search</strong> — exact, and completely fine up to ~10k–100k chunks
+    (it's the numpy one-liner in the build). Past that, scanning every vector per
+    query gets slow, so we trade a sliver of accuracy for speed with
+    <strong>approximate nearest neighbor (ANN)</strong> search — and
+    <strong>HNSW</strong> is the algorithm your vector DB almost certainly runs.
+  </p>
+
+  <figure class="anim" id="fig-hnsw">
+    <div class="fig-title">Animation · HNSW: highways then streets</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-hnsw-t">
+      <title id="fig-hnsw-t">HNSW navigating a small-world graph from a sparse top layer to a dense bottom layer versus brute force scanning all points</title>
+      <!-- brute force -->
+      <g id="h-brute">
+        <text x="150" y="30" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">brute force: check all N</text>
+        <g fill="#cbd5e1">
+          <circle cx="60" cy="60" r="6"/><circle cx="110" cy="80" r="6"/><circle cx="90" cy="120" r="6"/><circle cx="160" cy="70" r="6"/><circle cx="200" cy="110" r="6"/><circle cx="140" cy="140" r="6"/><circle cx="220" cy="60" r="6"/><circle cx="70" cy="160" r="6"/><circle cx="180" cy="160" r="6"/><circle cx="250" cy="130" r="6"/>
+        </g>
+        <text x="150" y="200" text-anchor="middle" font-size="17" fill="#64748b">every point, every query — O(N)</text>
+      </g>
+      <!-- HNSW layers -->
+      <g id="h-l2" class="sp-hide">
+        <text x="470" y="30" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">HNSW: layered small-world graph</text>
+        <text x="360" y="60" font-size="17" fill="#64748b">top layer (sparse) — highways</text>
+        <g stroke="#2563eb" stroke-width="2"><line x1="380" y1="80" x2="500" y2="90"/><line x1="500" y1="90" x2="590" y2="70"/></g>
+        <g fill="#2563eb"><circle cx="380" cy="80" r="7"/><circle cx="500" cy="90" r="7"/><circle cx="590" cy="70" r="7"/></g>
+        <circle cx="384" cy="82" r="11" fill="none" stroke="#d97706" stroke-width="3" id="h-cur1"/>
+      </g>
+      <g id="h-l1" class="sp-hide">
+        <text x="360" y="150" font-size="17" fill="#64748b">mid layer — main roads</text>
+        <g stroke="#60a5fa" stroke-width="1.5"><line x1="400" y1="170" x2="460" y2="185"/><line x1="460" y1="185" x2="520" y2="170"/><line x1="520" y1="170" x2="560" y2="195"/><line x1="460" y1="185" x2="500" y2="210"/></g>
+        <g fill="#60a5fa"><circle cx="400" cy="170" r="6"/><circle cx="460" cy="185" r="6"/><circle cx="520" cy="170" r="6"/><circle cx="560" cy="195" r="6"/><circle cx="500" cy="210" r="6"/></g>
+      </g>
+      <g id="h-l0" class="sp-hide">
+        <text x="360" y="248" font-size="17" fill="#64748b">bottom layer (all points) — streets</text>
+        <g fill="#93c5fd"><circle cx="390" cy="270" r="5"/><circle cx="430" cy="285" r="5"/><circle cx="470" cy="272" r="5"/><circle cx="510" cy="288" r="5"/><circle cx="550" cy="275" r="5"/><circle cx="450" cy="305" r="5"/><circle cx="490" cy="308" r="5"/></g>
+        <circle cx="490" cy="308" r="10" fill="none" stroke="#059669" stroke-width="3"/>
+        <text x="505" y="312" font-size="17" fill="#047857" font-weight="700">found</text>
+      </g>
+      <g id="h-punch" class="sp-hide">
+        <rect x="40" y="330" width="560" height="60" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="320" y="354" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">enter at the top, greedily hop toward the query, drop a layer,</text>
+        <text x="320" y="378" text-anchor="middle" font-size="17" fill="#b45309">repeat: ~log(N) hops instead of N — 1M vectors in microseconds</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-hnsw-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-hnsw svg",
+        caption: "#fig-hnsw-cap",
+        steps: [
+          { caption: "Brute force: for each query, compute similarity to all N vectors. Exact and simple — genuinely the right choice up to ~100k chunks." },
+          { caption: "HNSW builds a layered graph. The TOP layer holds few nodes with long-range links — highways across the space.", show: ["#h-l2"], holdMs: 5400 },
+          { caption: "Start at an entry node up top and greedily hop to whichever neighbor is closest to the query — covering huge distance in a few jumps.", show: ["#h-l2"], holdMs: 5200 },
+          { caption: "Drop to the middle layer: denser nodes, shorter links — main roads. Keep hopping greedily toward the query.", show: ["#h-l1"], holdMs: 5400 },
+          { caption: "Drop to the bottom layer holding ALL points — local streets — and refine to the true nearest neighbors.", show: ["#h-l0"], holdMs: 5400 },
+          { caption: "Total work: about log(N) hops, not N comparisons. A million vectors searched in microseconds — approximate, ~95-99% recall, and the reason your vector DB feels instant.", show: ["#h-punch"], holdMs: 6200 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Metadata filtering and hybrid search: your TF-IDF returns</h2>
+
+  <p>
+    Two upgrades close the loop to what you already knew. <strong>Metadata
+    filtering</strong>: store fields alongside each vector (date, author, doc type)
+    and constrain search — "only 2024 chunks," "only from the handbook" — cheap
+    precision the pure-vector purist forgets. <strong>Hybrid search</strong>: dense
+    vectors capture <em>meaning</em> but miss exact tokens (part numbers, error
+    codes, rare names — the OOV weakness of any embedder); <strong>BM25</strong>,
+    the modern heir of your TF-IDF, nails exact-term matching. Run both, fuse the
+    rankings (reciprocal rank fusion), and you cover each method's blind spot. Your
+    classical NLP wasn't superseded — it's a production component sitting right
+    beside the neural one.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Scale intuitions: a 10k-chunk corpus at 384-D fp32 is ~15 MB of vectors —
+      brute-force search returns in <strong>single-digit milliseconds</strong> in
+      numpy, no database needed. HNSW earns its keep past ~1M vectors, where it
+      hits <strong>~95–99% recall</strong> at <strong>sub-millisecond</strong>
+      latency while brute force would take ~100 ms — the accuracy you trade is real
+      but small, and tunable (higher <code>ef_search</code> → more recall, more
+      time). Typical chunking: <strong>256–512 tokens, ~50 overlap</strong>; the
+      single most common RAG bug remains chunks so large the real answer is a 5%
+      slice of a muddy embedding.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      This page is the course folding in on itself: M1.2 (cosine) is the search,
+      M5.1 (tokens) sets chunk budgets, M9 (MiniLM) is the embedder, M8.3+M11 are
+      the generation, and your old friend TF-IDF comes back as BM25 in hybrid
+      search. The build below deliberately uses <em>no vector database</em> — once
+      you've written the numpy cosine loop, "vector DB" stops being magic and
+      becomes "brute force plus HNSW plus metadata, productionized." That
+      demystification is the whole module's job.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: complete RAG in ~80 lines, no vector DB</div>
+<pre><code>import numpy as np, textwrap
+from sentence_transformers import SentenceTransformer
+from openai import OpenAI
+
+embedder = SentenceTransformer("all-MiniLM-L6-v2")   # M9, yours now
+client = OpenAI()
+
+# --- OFFLINE: chunk + embed -------------------------------------
+def chunk(text, size=400, overlap=50):               # token-ish by words
+    words = text.split()
+    step = size - overlap
+    return [" ".join(words[i:i+size]) for i in range(0, len(words), step)]
+
+docs = open("handbook.txt").read().split("\n\n---\n\n")   # your corpus
+chunks = [c for d in docs for c in chunk(d)]
+index = embedder.encode(chunks, normalize_embeddings=True)  # (N, 384)
+
+# --- ONLINE: retrieve + generate --------------------------------
+def rag(question, k=4):
+    q = embedder.encode([question], normalize_embeddings=True)[0]
+    sims = index @ q                                  # cosine = dot (M1.2)
+    top = np.argsort(-sims)[:k]                       # brute-force top-k
+    context = "\n\n".join(f"[{i}] {chunks[i]}" for i in top)
+    prompt = (f"Answer using ONLY these sources; cite [n]. "
+              f"If unsupported, say so.\n\n{context}\n\nQ: {question}")
+    r = client.chat.completions.create(model="gpt-4o-mini", temperature=0,
+        messages=[{"role": "user", "content": prompt}])
+    return r.choices[0].message.content, top
+
+print(rag("What is the refund window?"))
+</code></pre>
+    <p>
+      That's a real RAG system — the vector DB you'd normally reach for is those two
+      lines (<code>index @ q</code> and <code>argsort</code>) plus HNSW for scale and
+      metadata filters for precision. You'll extend exactly this pipeline in 12.2
+      (add a reranker) and evaluate it in 12.3. Keep it; it's the spine of the
+      course capstone.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    RAG is embed-chunks-offline, embed-query-online, cosine-search, stuff-and-generate —
+    and <strong>every box is a module you now own; the only real craft is chunking
+    (size vs coherence) and indexing (brute force under ~100k, HNSW beyond)</strong>.
+    A vector database is brute-force cosine + a small-world graph + metadata,
+    packaged — and your TF-IDF lives on as BM25 in hybrid search.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Walk through a RAG pipeline end to end and name the failure mode at each stage.</summary>
+      <div><p>Chunk (too large → muddy multi-topic embeddings that match weakly; too small → lost context) → embed chunks (wrong/weak embedder for domain → poor separation, M9.5) → index (ANN recall too low → misses relevant chunks; no metadata → can't scope) → embed query (must be the SAME model and, for asymmetric search, the right instruction prefix, M9.2) → retrieve top-k (k too small → answer chunk not retrieved; k too large → noise + context bloat, M11.2) → assemble prompt (poor ordering → lost-in-the-middle, M11.2; no delimiting → injection, M11.6) → generate (temperature too high → hallucinated citations, M11.1; no grounding instruction → unsupported claims). Debugging rule (12.3): first separate retrieval failure from generation failure — did the right chunk even make it into context?</p></div>
+    </details>
+    <details>
+      <summary>How do you choose chunk size and overlap, and why does it matter so much?</summary>
+      <div><p>It sets a ceiling on retrieval quality because a chunk's single embedding must represent all its content (pooling averages meaning, M9.1): oversized chunks blur multiple topics into one vector that ranks mediocre everywhere and burn context tokens; undersized chunks strip the context that disambiguates references. Choose by content structure: prose ~256–512 tokens with ~10–20% overlap so boundary-straddling facts survive in at least one chunk; structured docs (FAQ, code, tables) split on natural units (Q&amp;A pairs, functions) rather than length; token-aware counting (M5.1) to hit budgets exactly. Then measure — recall@k on a labeled query set (M9.5/12.3) — and tune; chunking is empirical, not a fixed rule. Semantic chunking (split on embedding-distance topic shifts) helps on heterogeneous documents.</p></div>
+    </details>
+    <details>
+      <summary>Explain HNSW intuitively and the accuracy/speed trade it makes. When would you NOT use it?</summary>
+      <div><p>HNSW builds a multi-layer navigable small-world graph: upper layers are sparse with long-range links (highways), lower layers dense with short links (streets), bottom layer contains everything. A query enters at the top, greedily hops toward the nearest node, descends a layer, repeats — reaching the neighborhood in ~log(N) hops instead of N comparisons. The trade: it's approximate (~95–99% recall depending on ef_search/M construction params), uses extra memory for the graph, and is costlier to build/update. Don't use it when N is small (≤~100k) — brute-force flat search is exact, simpler, and fast enough; when you need guaranteed exact recall; or when the index changes constantly (graph maintenance cost). Rule: start flat, adopt ANN only when brute-force latency actually hurts.</p></div>
+    </details>
+    <details>
+      <summary>What is hybrid search and when does adding BM25 to dense retrieval actually help?</summary>
+      <div><p>Hybrid = run dense (embedding) retrieval and sparse lexical retrieval (BM25, the TF-IDF heir) in parallel, then fuse rankings (e.g., reciprocal rank fusion). It helps precisely where dense embeddings are weak: exact-token matches the embedder smooths over — product SKUs, error codes, function names, rare proper nouns, legal citations, out-of-vocabulary/domain jargon the encoder rarely saw. Dense captures paraphrase and meaning ("how do I get my money back" ↔ "refund policy"); sparse captures literal terms ("error E-4021"). Fusing covers both blind spots and is one of the highest-ROI RAG upgrades. It matters less when queries and documents are always natural-language paraphrases with no critical exact tokens.</p></div>
+    </details>
+    <details>
+      <summary>A colleague says "we need a vector database." When is that true, and what are they actually buying?</summary>
+      <div><p>For a small corpus (≤~100k chunks) it's often overkill — numpy brute-force cosine over an in-memory matrix is milliseconds and zero ops burden. A dedicated vector DB earns its place at scale or with production needs: ANN indexing (HNSW/IVF) for millions of vectors at low latency, metadata filtering and hybrid search built in, persistence and incremental updates/deletes, sharding/replication, and concurrency. So they're buying an ANN index + metadata engine + operational infrastructure, not a new capability — the retrieval math is the same dot product you can write in one line. Frame the decision by corpus size, update rate, latency SLA, and team ops capacity, not by "everyone uses one."</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sampling: Temperature &amp; Top-p — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="11-llm-era/sampling-temperature-top-p">
+<main id="content">
+
+  <h1>Sampling: Temperature &amp; Top-p</h1>
+
+  <p>
+    You've typed <code>temperature=0.7, top_p=0.9</code> into API calls for years —
+    numbers copied from someone's blog post, adjusted by vibes. This module opens with
+    the end of that cargo cult. You already own every piece: the model outputs a
+    probability distribution over the next token (M4.1), produced by a softmax (M3.2).
+    <strong>Sampling parameters don't touch the model at all — they reshape that final
+    distribution before one token is drawn from it.</strong> That's the whole secret.
+  </p>
+
+  <h2>Greedy decoding, and why it repeats itself</h2>
+
+  <p>
+    The obvious strategy — always take the highest-probability token — is called
+    <strong>greedy decoding</strong>. It sounds optimal and isn't, for two reasons.
+    First, locally-best tokens don't compose into globally-best text (picking the
+    single most likely next word at every step is how you get the blandest possible
+    sentence). Second, and famously: greedy loops. A phrase that was likely once is
+    likely again after it appears, and the model spirals — "I'm sorry. I'm sorry.
+    I'm sorry." Randomness isn't a bug tolerance in LLMs; a controlled amount is
+    <em>required</em> for text that sounds alive. The question is how much, and
+    that's exactly what your two dials control.
+  </p>
+
+  <h2>Temperature: the softmax divisor you already met</h2>
+
+  <p>
+    M3.2 planted this flag and now we collect it: temperature is a number that
+    <strong>divides every logit before the softmax</strong>. Dividing by
+    T &lt; 1 stretches the gaps between scores — the winner's lead grows, probability
+    concentrates, output becomes focused and repeatable. Dividing by T &gt; 1
+    compresses the gaps — underdogs get real probability mass, output diversifies
+    and, pushed too far, dissolves into word salad. At T → 0 the distribution
+    collapses onto the single top token: greedy, as a limiting case.
+  </p>
+
+  <div class="formula">
+    <div class="fo-math">P(token i) = e^(z<sub>i</sub>/T) / Σ<sub>j</sub> e^(z<sub>j</sub>/T)</div>
+    <p class="fo-words">
+      In words: the same softmax from M3.2 with one knob added — divide every raw
+      score z by T first. Small T exaggerates score differences (sharp, confident
+      distribution); large T shrinks them (flat, adventurous distribution). The
+      model's opinion never changes — only how strictly you enforce it at the draw.
+    </p>
+  </div>
+
+  <figure class="anim" id="fig-temp">
+    <div class="fig-title">Animation · One distribution, three temperatures</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-temp-t">
+      <title id="fig-temp-t">Next-token probability bars sharpening and flattening as temperature changes</title>
+      <text x="320" y="34" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">"The capital of France is ___"</text>
+      <!-- axis labels -->
+      <g class="mono">
+        <text x="120" y="330" text-anchor="middle" font-size="17" class="sv-ink">Paris</text>
+        <text x="220" y="330" text-anchor="middle" font-size="17" fill="#64748b">the</text>
+        <text x="320" y="330" text-anchor="middle" font-size="17" fill="#64748b">Lyon</text>
+        <text x="420" y="330" text-anchor="middle" font-size="17" fill="#64748b">home</text>
+        <text x="520" y="330" text-anchor="middle" font-size="17" fill="#64748b">baguette</text>
+      </g>
+      <line x1="60" y1="310" x2="600" y2="310" stroke="#cbd5e1" stroke-width="2"/>
+      <!-- T=1 bars -->
+      <g id="t-base">
+        <rect x="95"  y="130" width="50" height="180" rx="6" fill="#2563eb"/>
+        <rect x="195" y="270" width="50" height="40"  rx="6" fill="#93c5fd"/>
+        <rect x="295" y="282" width="50" height="28"  rx="6" fill="#93c5fd"/>
+        <rect x="395" y="292" width="50" height="18"  rx="6" fill="#cbd5e1"/>
+        <rect x="495" y="300" width="50" height="10"  rx="6" fill="#cbd5e1"/>
+        <text x="120" y="118" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">.72</text>
+      </g>
+      <g id="t-lab">
+        <rect x="240" y="54" width="160" height="34" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text id="t-lab-txt" x="320" y="77" text-anchor="middle" font-size="18" class="mono sv-ink" font-weight="700">T = 1.0</text>
+      </g>
+      <!-- T=0.2 bars -->
+      <g id="t-cold" class="sp-hide">
+        <rect x="95"  y="60"  width="50" height="250" rx="6" fill="#2563eb"/>
+        <rect x="195" y="304" width="50" height="6"   rx="3" fill="#cbd5e1"/>
+        <rect x="295" y="306" width="50" height="4"   rx="2" fill="#cbd5e1"/>
+        <rect x="395" y="308" width="50" height="2"   rx="1" fill="#cbd5e1"/>
+        <rect x="495" y="308" width="50" height="2"   rx="1" fill="#cbd5e1"/>
+        <text x="120" y="48" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">.99</text>
+      </g>
+      <!-- T=1.5 bars -->
+      <g id="t-hot" class="sp-hide">
+        <rect x="95"  y="200" width="50" height="110" rx="6" fill="#2563eb"/>
+        <rect x="195" y="240" width="50" height="70"  rx="6" fill="#93c5fd"/>
+        <rect x="295" y="248" width="50" height="62"  rx="6" fill="#93c5fd"/>
+        <rect x="395" y="258" width="50" height="52"  rx="6" fill="#93c5fd"/>
+        <rect x="495" y="266" width="50" height="44"  rx="6" fill="#93c5fd"/>
+        <text x="120" y="188" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">.38</text>
+        <text x="520" y="254" text-anchor="middle" font-size="17" class="mono" fill="#b45309">.13!</text>
+      </g>
+      <g id="t-note" class="sp-hide">
+        <rect x="40" y="348" width="560" height="44" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="320" y="369" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">the model's ranking never changed — temperature only</text>
+        <text x="320" y="388" text-anchor="middle" font-size="17" fill="#b45309">changes how strictly the draw obeys it</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-temp-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-temp svg",
+        caption: "#fig-temp-cap",
+        steps: [
+          { caption: "T = 1.0 — the raw softmax output. Paris leads at 0.72, but 'baguette' keeps a lottery ticket. One in four draws won't say Paris." },
+          { caption: "T = 0.2 — logits divided by 0.2 means gaps ×5 before the exp. Paris → 0.99. Near-deterministic: right for extraction, classification, code.", hide: ["#t-base"], show: ["#t-cold"], attrs: { "#t-lab-txt": { text: "T = 0.2" } }, holdMs: 5600 },
+          { caption: "T = 1.5 — gaps compressed. Paris only 0.38; 'baguette' at 0.13 will actually be drawn sometimes. Creative — or unhinged, if the task needed facts.", hide: ["#t-cold"], show: ["#t-hot"], attrs: { "#t-lab-txt": { text: "T = 1.5" } }, holdMs: 5600 },
+          { caption: "The key mental model: temperature reshapes CONFIDENCE, not KNOWLEDGE. The ranking is untouched — only the enforcement changes. T→0 is greedy as a limit.", show: ["#t-note"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Top-k and top-p: two ways to cut the tail</h2>
+
+  <p>
+    Temperature has a flaw: raising it feeds probability to <em>everything</em>,
+    including the genuinely absurd tail — a 50k-token vocabulary has a lot of
+    "baguette"s. So we cut the tail before drawing. <strong>Top-k</strong> keeps the
+    k highest-probability tokens, always exactly k — rigid, blind to context.
+    <strong>Top-p (nucleus)</strong> keeps the smallest set whose probabilities sum
+    to p — a waterline, not a headcount. That adaptivity is why top-p won: when the
+    model is certain (one token holds 0.95), the nucleus is 1–2 tokens; when many
+    continuations are legitimate (the start of a story), the nucleus opens up to
+    dozens. The cut adapts to the model's own confidence, per token.
+  </p>
+
+  <figure class="anim" id="fig-topp">
+    <div class="fig-title">Animation · Top-k's fixed headcount vs top-p's waterline</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-topp-t">
+      <title id="fig-topp-t">Sorted probability bars cut by top-k versus adaptive top-p on confident and uncertain distributions</title>
+      <text id="tp-title" x="320" y="32" text-anchor="middle" font-size="18" class="sv-ink" font-weight="700">confident model: one clear winner</text>
+      <line x1="50" y1="290" x2="610" y2="290" stroke="#cbd5e1" stroke-width="2"/>
+      <!-- confident distribution -->
+      <g id="tp-conf">
+        <rect x="60"  y="80"  width="52" height="210" rx="6" fill="#2563eb"/>
+        <rect x="128" y="250" width="52" height="40"  rx="6" fill="#93c5fd"/>
+        <rect x="196" y="272" width="52" height="18"  rx="6" fill="#cbd5e1"/>
+        <rect x="264" y="280" width="52" height="10"  rx="6" fill="#cbd5e1"/>
+        <rect x="332" y="284" width="52" height="6"   rx="3" fill="#cbd5e1"/>
+        <rect x="400" y="286" width="52" height="4"   rx="2" fill="#cbd5e1"/>
+        <text x="86"  y="68" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">.78</text>
+        <text x="154" y="238" text-anchor="middle" font-size="17" class="mono" fill="#64748b">.14</text>
+      </g>
+      <!-- uncertain distribution -->
+      <g id="tp-unc" class="sp-hide">
+        <rect x="60"  y="212" width="52" height="78" rx="6" fill="#2563eb"/>
+        <rect x="128" y="220" width="52" height="70" rx="6" fill="#60a5fa"/>
+        <rect x="196" y="228" width="52" height="62" rx="6" fill="#60a5fa"/>
+        <rect x="264" y="236" width="52" height="54" rx="6" fill="#93c5fd"/>
+        <rect x="332" y="244" width="52" height="46" rx="6" fill="#93c5fd"/>
+        <rect x="400" y="252" width="52" height="38" rx="6" fill="#93c5fd"/>
+        <rect x="468" y="260" width="52" height="30" rx="6" fill="#cbd5e1"/>
+        <rect x="536" y="266" width="52" height="24" rx="6" fill="#cbd5e1"/>
+        <text x="86" y="200" text-anchor="middle" font-size="17" class="mono" fill="#1d4ed8">.15</text>
+      </g>
+      <!-- top-k cut -->
+      <g id="tp-k" class="sp-hide">
+        <line x1="256" y1="60" x2="256" y2="290" stroke="#dc2626" stroke-width="3" stroke-dasharray="8 5"/>
+        <text x="262" y="76" font-size="17" fill="#b91c1c" font-weight="700">top-k = 3: always 3,</text>
+        <text x="262" y="98" font-size="17" fill="#b91c1c">no matter what</text>
+      </g>
+      <!-- top-p waterline confident -->
+      <g id="tp-p1" class="sp-hide">
+        <rect x="54" y="66" width="132" height="232" rx="10" fill="none" stroke="#059669" stroke-width="3"/>
+        <text x="196" y="130" font-size="17" fill="#047857" font-weight="700">top-p = 0.9:</text>
+        <text x="196" y="152" font-size="17" fill="#047857">2 tokens reach 0.92 —</text>
+        <text x="196" y="174" font-size="17" fill="#047857">nucleus stays tiny</text>
+      </g>
+      <!-- top-p waterline uncertain -->
+      <g id="tp-p2" class="sp-hide">
+        <rect x="54" y="204" width="472" height="94" rx="10" fill="none" stroke="#059669" stroke-width="3"/>
+        <text x="320" y="120" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">same top-p = 0.9: now 7 tokens needed to reach 0.9 —</text>
+        <text x="320" y="142" text-anchor="middle" font-size="17" fill="#047857">the nucleus OPENED because the model is unsure</text>
+      </g>
+      <g id="tp-punch" class="sp-hide">
+        <rect x="40" y="330" width="560" height="60" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+        <text x="320" y="354" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">top-p adapts to the model's confidence per token;</text>
+        <text x="320" y="378" text-anchor="middle" font-size="17" fill="#1d4ed8">top-k can't. That's why top-p is the default everywhere.</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-topp-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-topp svg",
+        caption: "#fig-topp-cap",
+        steps: [
+          { caption: "Tokens sorted by probability, most likely first. Here the model is confident: 0.78 + 0.14 in the first two bars, a long useless tail after." },
+          { caption: "Top-k=3 draws a fixed line after 3 tokens — including one junk token it didn't need. k is a headcount, deaf to what the distribution looks like.", show: ["#tp-k"], holdMs: 5400 },
+          { caption: "Top-p=0.9 instead fills a nucleus until cumulative probability passes 0.9: just 2 tokens here. Tail gone, nothing absurd survives the cut.", hide: ["#tp-k"], show: ["#tp-p1"], holdMs: 5600 },
+          { caption: "Now a genuinely open context — 'Once upon a time, the' — where many continuations are valid. Every bar is short; no token dominates.", hide: ["#tp-p1", "#tp-conf"], show: ["#tp-unc"], attrs: { "#tp-title": { text: "uncertain model: many valid continuations" } }, holdMs: 5400 },
+          { caption: "The SAME top-p=0.9 now admits 7 tokens. The cut moved by itself — wide when the model is unsure, tight when it's certain.", show: ["#tp-p2"], holdMs: 5800 },
+          { caption: "In practice: temperature shapes the distribution, top-p trims its tail, and they compose. Repetition penalties handle the leftover echo problem.", show: ["#tp-punch"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>The remaining dials, briefly</h2>
+
+  <p>
+    <strong>Frequency penalty</strong> subtracts from a token's logit each time it has
+    already appeared (fights repetition); <strong>presence penalty</strong> subtracts
+    a flat amount once a token has appeared at all (nudges toward new topics). Both
+    operate on logits <em>before</em> softmax, like temperature. They're band-aids for
+    the echo problem greedy decoding made famous — small values (0.1–0.5) usually
+    suffice, and reasoning-heavy tasks generally want them at 0 (repeating an
+    equation isn't a bug).
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      Working defaults, by task: <strong>extraction / classification / code:
+      T = 0–0.2</strong>, top_p = 1 (you want the model's honest argmax — your GLiNER
+      threshold instinct applies); <strong>chat / RAG answers: T = 0.7,
+      top_p = 0.9–0.95</strong> (industry default for a reason — alive but grounded);
+      <strong>brainstorming: T = 1.0–1.3</strong>, top_p = 0.95 (temperature feeds
+      the tail, top-p keeps it from going feral). And one myth killed: T = 0 is
+      <em>not</em> perfectly deterministic in production APIs — batching order and
+      floating-point non-associativity on GPUs (M7.1) still wiggle results. Treat
+      determinism as a strong tendency, not a contract.
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      Every knob on this page acts on the output of M3.2's softmax over M4.1's
+      next-token distribution — machinery you can now draw from memory. Your RAG
+      chatbot almost certainly wants two <em>different</em> settings you may have
+      been sharing: near-zero temperature for anything parsed downstream (JSON,
+      citations, tool arguments) and ~0.7 for the conversational answer itself. If
+      you've ever seen your bot cite a document that doesn't exist at T = 1.0,
+      you've watched the tail get sampled.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: the drift grid</div>
+<pre><code>from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+
+tok = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+
+msgs = [{"role": "user", "content": "Describe coffee in one sentence."}]
+ids = tok.apply_chat_template(msgs, return_tensors="pt", add_generation_prompt=True)
+
+for T in [0.2, 0.7, 1.3]:
+    for p in [0.5, 0.95]:
+        torch.manual_seed(0)
+        out = model.generate(ids, do_sample=True, temperature=T, top_p=p,
+                             max_new_tokens=40, pad_token_id=tok.eos_token_id)
+        print(f"T={T} p={p}: {tok.decode(out[0, ids.shape[1]:], skip_special_tokens=True)}")
+</code></pre>
+    <p>
+      Run the 3×2 grid and read it like the animations: down the temperature axis
+      the wording loosens; tightening top_p at high temperature reins the chaos back
+      in. Then repeat with a factual prompt ("What is the capital of France?") and
+      watch high temperature start gambling with the answer itself.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    The model always outputs the same thing: a full probability distribution over
+    its vocabulary. <strong>Temperature reshapes that distribution (divide logits by
+    T inside the softmax); top-p trims its tail adaptively; then one token is drawn.</strong>
+    Low T for anything a program will parse, ~0.7 for humans, and never confuse
+    sampling randomness with model knowledge — the ranking never moved.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>Why does greedy decoding produce repetitive text, and why does sampling fix it?</summary>
+      <div><p>Greedy takes the argmax at every step. Two failure modes: (1) locally-optimal tokens don't compose into globally good text — beam search partially addresses this for closed tasks like translation; (2) degenerate loops: once a phrase appears, its tokens get probability boosts in similar contexts, and argmax deterministically re-enters the same cycle ("I'm sorry. I'm sorry."). Sampling breaks the cycle because a random draw eventually escapes the loop's basin. The deeper point (Holtzman's nucleus-sampling paper): human text is NOT a maximum-likelihood object — real language constantly uses "surprising" tokens, so decoding must preserve some entropy to sound human.</p></div>
+    </details>
+    <details>
+      <summary>Mechanically, what does temperature do? Why does T→0 approximate greedy?</summary>
+      <div><p>Temperature divides every logit before the softmax: P = softmax(z/T). For T&lt;1, differences between logits are amplified, so the exp() gap between winner and rest explodes and mass concentrates on the top token; for T&gt;1, differences shrink and the distribution flattens toward uniform. As T→0 the largest logit's advantage becomes infinite and softmax converges to a one-hot on the argmax — greedy decoding as a limit. Crucially it's a monotone transform: the ranking of tokens never changes, only the sharpness of the distribution around that ranking.</p></div>
+    </details>
+    <details>
+      <summary>Top-k vs top-p: what's the difference and why did top-p become the default?</summary>
+      <div><p>Top-k keeps a fixed number of candidates; top-p keeps the smallest prefix of the sorted distribution whose cumulative probability ≥ p. Top-k's flaw is rigidity: on a confident distribution k=50 admits 48 junk tokens; on a genuinely open one it may exclude legitimate candidates. Top-p adapts per token to the model's own uncertainty — tiny nucleus when confident, wide when not. Since the whole point of tail-cutting is "match the candidate set to the actual uncertainty," the adaptive rule wins. In practice they can be combined (top-k as a hard safety cap, top-p inside it).</p></div>
+    </details>
+    <details>
+      <summary>Is temperature=0 deterministic? Answer like someone who has run production LLMs.</summary>
+      <div><p>Mostly, not exactly. T=0 (or greedy) fixes the sampling rule, but production non-determinism leaks in elsewhere: floating-point addition is non-associative and GPU kernel scheduling varies, so logits can differ in the last bits between runs; continuous batching means your request shares kernels with different neighbors each time; ties in the top logit break arbitrarily; and MoE models add expert-routing variance under batching. When two tokens sit within float-noise of each other, a one-token flip early can cascade into a visibly different completion. Treat T=0 as "minimum variance," and design downstream parsing to tolerate variation rather than assuming replay-exactness.</p></div>
+    </details>
+    <details>
+      <summary>Your RAG bot occasionally cites a document that doesn't exist. Which sampling settings do you inspect first, and why?</summary>
+      <div><p>Temperature and top-p on the answer-generation call. Fabricated citations are classic tail-sampling: the model's distribution over "next citation token" has real mass on plausible-but-fake IDs, and high T or loose top-p lets that mass get drawn. Fixes in order: T→0–0.2 for any structured/citation-bearing output; constrain the format (make the model choose from an explicit list of retrieved doc IDs placed in the prompt — turning generation into selection); separate calls — creative wording at 0.7 for prose, near-greedy for the citation block; and add a post-hoc check that every cited ID exists in the retrieved set (a grounding check, formalized in 11.6/12.3). Sampling isn't the root cause of hallucination — but it's the cheapest dial that reduces its rate.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

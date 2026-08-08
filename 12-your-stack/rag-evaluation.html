@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG Evaluation — The Missing Middle</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body data-page="12-your-stack/rag-evaluation">
+<main id="content">
+
+  <h1>RAG Evaluation</h1>
+
+  <p>
+    "The bot gave a wrong answer." Useless as a bug report — because a RAG system can
+    fail in two completely different places, needing opposite fixes. This page gives
+    you the discipline to tell them apart, and the metrics to track each. It's the
+    measurement thread (M3.6 → M9.5 → M11.4) aimed at the system you actually ship,
+    and it turns "the bot feels worse since we changed the prompt" into a number that
+    either moved or didn't.
+  </p>
+
+  <h2>The first question: retrieval or generation?</h2>
+
+  <p>
+    Every RAG failure is one of two kinds, and you must separate them before fixing
+    anything. <strong>Retrieval failure:</strong> the right information never reached
+    the prompt — no chunk in the top-k contained the answer, so the LLM was doomed
+    from the start (fix retrieval: chunking, embedder, reranking, hybrid search —
+    M12.1/12.2). <strong>Generation failure:</strong> the right chunk <em>was</em> in
+    context and the LLM still got it wrong — misread it, ignored it, or hallucinated
+    past it (fix generation: prompt, model, temperature, grounding — M11).
+    Conflating them wastes weeks; you'll tune prompts while the real problem is a
+    chunk that never got retrieved. The debug move is mechanical: for a failed
+    answer, look at what was retrieved. Answer present in context? Generation problem.
+    Absent? Retrieval problem.
+  </p>
+
+  <figure class="anim" id="fig-split">
+    <div class="fig-title">Animation · Which half failed?</div>
+    <svg viewBox="0 0 640 400" aria-labelledby="fig-split-t">
+      <title id="fig-split-t">A wrong RAG answer traced back to distinguish retrieval failure from generation failure</title>
+      <g>
+        <rect x="200" y="24" width="240" height="46" rx="12" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+        <text x="320" y="46" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">wrong answer 🚨</text>
+        <text x="320" y="64" text-anchor="middle" font-size="17" fill="#7f1d1d">now: which half broke?</text>
+      </g>
+      <text x="320" y="98" text-anchor="middle" font-size="17" class="sv-ink" font-weight="700">look at the retrieved chunks</text>
+      <!-- branch A -->
+      <g id="s-a" class="sp-hide">
+        <rect x="30" y="120" width="280" height="120" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+        <text x="170" y="146" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">answer WAS in context</text>
+        <text x="170" y="172" text-anchor="middle" font-size="17" class="sv-ink">retrieval worked ✓</text>
+        <text x="170" y="196" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">GENERATION failure</text>
+        <text x="170" y="220" text-anchor="middle" font-size="17" fill="#64748b">fix: prompt, model, temp,</text>
+        <text x="170" y="236" text-anchor="middle" font-size="17" fill="#64748b">grounding (M11)</text>
+      </g>
+      <!-- branch B -->
+      <g id="s-b" class="sp-hide">
+        <rect x="330" y="120" width="280" height="120" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+        <text x="470" y="146" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">answer NOT in context</text>
+        <text x="470" y="172" text-anchor="middle" font-size="17" class="sv-ink">LLM never had a chance ✗</text>
+        <text x="470" y="196" text-anchor="middle" font-size="17" fill="#b91c1c" font-weight="700">RETRIEVAL failure</text>
+        <text x="470" y="220" text-anchor="middle" font-size="17" fill="#64748b">fix: chunking, embedder,</text>
+        <text x="470" y="236" text-anchor="middle" font-size="17" fill="#64748b">reranking, hybrid (M12.1/2)</text>
+      </g>
+      <g id="s-metrics" class="sp-hide">
+        <rect x="30" y="256" width="280" height="76" rx="12" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="170" y="280" text-anchor="middle" font-size="17" fill="#1d4ed8" font-weight="700">generation metrics</text>
+        <text x="170" y="302" text-anchor="middle" font-size="17" fill="#1d4ed8">faithfulness (grounded?)</text>
+        <text x="170" y="322" text-anchor="middle" font-size="17" fill="#1d4ed8">answer relevance</text>
+        <rect x="330" y="256" width="280" height="76" rx="12" fill="#fde68a" stroke="#d97706"/>
+        <text x="470" y="280" text-anchor="middle" font-size="17" fill="#b45309" font-weight="700">retrieval metrics</text>
+        <text x="470" y="302" text-anchor="middle" font-size="17" fill="#b45309">context recall (M9.5)</text>
+        <text x="470" y="322" text-anchor="middle" font-size="17" fill="#b45309">context precision</text>
+      </g>
+      <g id="s-punch" class="sp-hide">
+        <rect x="40" y="346" width="560" height="44" rx="12" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+        <text x="320" y="368" text-anchor="middle" font-size="17" fill="#047857" font-weight="700">measure BOTH halves separately — a single "accuracy"</text>
+        <text x="320" y="388" text-anchor="middle" font-size="17" fill="#047857">number hides which one to fix</text>
+      </g>
+    </svg>
+    <p class="sp-caption" id="fig-split-cap"></p>
+  </figure>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      new StepPlayer({
+        svg: "#fig-split svg",
+        caption: "#fig-split-cap",
+        steps: [
+          { caption: "A wrong answer. Before touching anything, run the one diagnostic that matters: look at the chunks that were actually retrieved for this query." },
+          { caption: "Case A — the correct information WAS in the retrieved context. Retrieval did its job; the LLM fumbled. This is a generation failure — fix in M11's territory.", show: ["#s-a"], holdMs: 6000 },
+          { caption: "Case B — the answer was NOT in any retrieved chunk. The LLM was set up to fail; no prompt tweak can conjure absent information. This is a retrieval failure — fix in M12.1/12.2.", show: ["#s-b"], holdMs: 6000 },
+          { caption: "Each half gets its own metrics. Generation: faithfulness (every claim supported by context?) and answer relevance. Retrieval: context recall and precision (M9.5's family).", show: ["#s-metrics"], holdMs: 6200 },
+          { caption: "The discipline: never report one blended 'accuracy'. Measure retrieval and generation separately, so every regression points at the half that caused it.", show: ["#s-punch"], holdMs: 6000 }
+        ]
+      });
+    });
+  </script>
+
+  <h2>Retrieval metrics: is the answer even reaching the LLM?</h2>
+
+  <p>
+    These are M9.5's metrics, now measured on the RAG system rather than the bare
+    embedder. <strong>Context recall</strong>: of the information needed to answer,
+    how much appeared in the retrieved chunks? (The ceiling on everything — if it's
+    low, nothing downstream can save you.) <strong>Context precision</strong>: of the
+    retrieved chunks, how many were actually relevant? (Low precision means you're
+    burning context tokens and inviting lost-in-the-middle, M11.2, and injection
+    surface, M11.6.) You can compute these two ways: with a labeled set (query →
+    known-relevant chunk IDs, the gold standard) or, when labels are scarce, with an
+    LLM judging whether each retrieved chunk was needed — the RAGAS approach below.
+  </p>
+
+  <h2>Generation metrics: did it use what it got?</h2>
+
+  <p>
+    <strong>Faithfulness (groundedness)</strong> is the one that matters most for
+    trust: is every claim in the answer supported by the retrieved context? This is
+    the direct, measurable counter to hallucination (M11.6) — decompose the answer
+    into individual claims, check each against the chunks, score the fraction
+    supported. An answer can be fluent, confident, and 40% ungrounded; only this
+    metric catches it. <strong>Answer relevance</strong>: does the answer actually
+    address the question (not a grounded-but-off-topic ramble)? Together they pin the
+    generation half: faithfulness guards against making things up, relevance against
+    dodging the question.
+  </p>
+
+  <h2>RAGAS and the LLM-judged pipeline</h2>
+
+  <p>
+    Labeling gold-relevant chunks for every query is expensive, so the practical
+    pattern (popularized by RAGAS) uses an LLM as the grader — exactly M11.4's
+    LLM-as-judge, pointed at your pipeline. For each query it can estimate context
+    recall/precision (was each chunk useful?), faithfulness (is each answer-claim in
+    the context?), and answer relevance — no human labels required for a first read.
+    Carry M11.4's warnings with it: judges have position/verbosity/self-preference
+    biases, so validate the judge against a small human-labeled sample before
+    trusting it, prefer a judge from a different model family than your generator,
+    and treat scores as directional (did this change help?) rather than absolute
+    truth. Even a noisy automated eval beats shipping on vibes.
+  </p>
+
+  <div class="realnum callout">
+    <div class="co-head">Real numbers</div>
+    <p>
+      What a real RAG eval loop looks like: a golden set of <strong>30–100
+      questions</strong> drawn from actual user logs, each with the reference answer
+      and known-relevant chunk IDs (an afternoon to build, M11.4). Track four numbers
+      per change: <strong>context recall, context precision, faithfulness, answer
+      relevance</strong>. Typical debugging story: bot "accuracy" is 60%; splitting
+      it reveals context recall is 65% (retrieval is the bottleneck, not the LLM), so
+      you add a reranker (M12.2) and recall jumps to 88% — and answer quality follows
+      <em>without touching a single prompt</em>. That's the entire value of separating
+      the metrics: you fixed the right half. Run the suite in CI on every prompt,
+      model, chunking, or retrieval change; regressions under ~5 points are usually
+      judge noise (run twice to confirm, M11.4).
+    </p>
+  </div>
+
+  <div class="connect callout">
+    <div class="co-head">Connect the dots</div>
+    <p>
+      This is the whole measurement arc landing on your own system: M3.6's precision/
+      recall become context precision/recall; M9.5's recall@k measures whether the
+      answer chunk was retrieved; M11.4's LLM-as-judge (biases and all) grades
+      faithfulness; M11.6's grounding check <em>is</em> the faithfulness metric,
+      promoted from a safety guardrail to an evaluation number. Same discipline, top
+      to bottom: name the metric, split the failure, hold out a clean set, distrust a
+      single blended score.
+    </p>
+  </div>
+
+  <div class="build callout">
+    <div class="co-head">Build: evaluate your 12.1/12.2 pipeline, both halves</div>
+<pre><code>import json
+from openai import OpenAI
+client = OpenAI()
+
+golden = json.load(open("golden.json"))
+# [{"q": "...", "answer": "...", "relevant_ids": [3, 17]}, ...]
+
+def context_recall(top_ids, relevant_ids):
+    return len(set(top_ids) &amp; set(relevant_ids)) / max(1, len(relevant_ids))
+
+def faithfulness(answer, context):          # LLM-judge (M11.4)
+    p = (f"List each factual claim in ANSWER. For each, is it supported "
+         f"by CONTEXT? Reply JSON {{'supported': n, 'total': n}}.\n\n"
+         f"CONTEXT:\n{context}\n\nANSWER:\n{answer}")
+    r = client.chat.completions.create(model="gpt-4o", temperature=0,
+        messages=[{"role": "user", "content": p}])
+    d = json.loads(r.choices[0].message.content)
+    return d["supported"] / max(1, d["total"])
+
+rec, faith = [], []
+for item in golden:
+    top = rerank(item["q"], retrieve(item["q"], 50))   # 12.2 pipeline
+    ctx = "\n\n".join(chunks[i] for i in top)
+    ans = generate(item["q"], ctx)                      # 12.1 generation
+    rec.append(context_recall(top, item["relevant_ids"]))
+    faith.append(faithfulness(ans, ctx))
+
+print(f"context recall@5: {sum(rec)/len(rec):.2f}")     # retrieval half
+print(f"faithfulness:     {sum(faith)/len(faith):.2f}")  # generation half
+</code></pre>
+    <p>
+      Now the diagnostic power is real: if context recall is low, invest in retrieval
+      (reranking, hybrid, chunking); if recall is high but faithfulness is low, the
+      LLM is ignoring good context — fix the prompt, lower temperature, or add the
+      grounding gate (M11.6). Keep <code>golden.json</code> in git and run this on
+      every change — it's your RAG regression suite.
+    </p>
+  </div>
+
+  <h2>If you remember one thing</h2>
+  <p>
+    A RAG failure is either <strong>retrieval</strong> (the answer never reached the
+    prompt) or <strong>generation</strong> (it did and the LLM blew it) — and you
+    must measure them separately: context recall/precision for the first,
+    faithfulness/answer-relevance for the second. A single blended "accuracy" hides
+    which half to fix; splitting it tells you exactly where to spend your next week.
+  </p>
+
+  <div class="interview">
+    <h2>Interview questions</h2>
+    <details>
+      <summary>How do you debug a RAG system that gives a wrong answer?</summary>
+      <div><p>First, localize: inspect the retrieved context for that query. If the needed information is absent from the top-k, it's a retrieval failure — no generation fix can help, so work on chunking, the embedder, reranking (M12.2), hybrid search, or k. If the information IS present and the answer is still wrong, it's a generation failure — the LLM misread, ignored, or hallucinated past it, so work on the prompt (grounding instructions, chunk ordering for lost-in-the-middle), temperature, model choice, or a faithfulness gate. This retrieval-vs-generation split is the single most important RAG debugging skill; skipping it leads to endless prompt-tweaking against what is actually a retrieval bug (or vice versa). Then quantify with separate metrics so the fix is verified, not assumed.</p></div>
+    </details>
+    <details>
+      <summary>Define context recall, context precision, faithfulness, and answer relevance.</summary>
+      <div><p>Retrieval side — Context recall: of the information required to answer, what fraction appears in the retrieved chunks (the ceiling on the whole system); Context precision: of the retrieved chunks, what fraction are actually relevant (low precision wastes context budget and adds noise/lost-in-the-middle/injection surface). Generation side — Faithfulness/groundedness: what fraction of the answer's claims are supported by the retrieved context (the direct anti-hallucination metric); Answer relevance: how well the answer addresses the actual question (catches grounded-but-off-topic responses). The pairing is deliberate: recall/precision diagnose whether good context was assembled; faithfulness/relevance diagnose whether the model used it correctly. You want all four, tracked separately.</p></div>
+    </details>
+    <details>
+      <summary>What is faithfulness/groundedness and how do you measure it without human labels?</summary>
+      <div><p>Faithfulness = every claim in the generated answer is entailed by the retrieved context; it's the operational, measurable form of "don't hallucinate" (M11.6). Automated measurement (RAGAS-style): use an LLM to decompose the answer into atomic claims, then for each claim judge whether the context supports it, and score the supported fraction. It requires no gold answers — only the context and the produced answer — which is why it scales. Caveats from M11.4: the judge has biases and noise, so validate it against a small human-labeled sample, use a judge from a different family than the generator, run twice to gauge variance, and treat scores as directional. The same mechanism doubles as a runtime guardrail: gate answers whose faithfulness falls below a threshold.</p></div>
+    </details>
+    <details>
+      <summary>Your RAG bot's answer quality dropped after a prompt change. How do you confirm and localize the regression?</summary>
+      <div><p>Run the golden-set eval before and after the change (that's why it lives in git and CI). Because the change was to the prompt, expect retrieval metrics (context recall/precision) to be unchanged — verify that; if they moved, something else changed too. Look at generation metrics: a faithfulness or answer-relevance drop confirms the prompt regression and quantifies it. Then compare individual failing cases old-vs-new to see what the new prompt broke (over-terse instructions dropping grounding? a format constraint fighting the answer?). Guard against false alarms: differences under ~5 points can be judge noise, so run the eval twice and check variance (M11.4). This converts "feels worse" into a specific, reproducible number attached to the specific change.</p></div>
+    </details>
+    <details>
+      <summary>How do you build a golden evaluation set for RAG, and what makes a good one?</summary>
+      <div><p>Source questions from real user logs (or realistic synthetic ones an LLM generates from your corpus), covering the actual distribution — common queries, edge cases, known failure modes, and out-of-scope questions the bot SHOULD refuse. For each, record: the question, a reference answer or rubric of must-have facts, and the IDs of chunks that genuinely contain the answer (enabling exact context-recall). Size: 30–100 is enough to be directional and cheap to rerun; grow it as you discover new failure classes (every production bug becomes a regression case). Qualities of a good set: representative of real traffic, includes negatives/refusals, has checkable criteria (exact strings + rubric) so scoring isn't purely judge-dependent, and is version-controlled and run in CI on every retrieval/prompt/model change. It's a behavior test suite, not a one-off report.</p></div>
+    </details>
+  </div>
+
+</main>
+<script src="../assets/js/manifest.js"></script>
+<script src="../assets/js/site.js"></script>
+<script src="../assets/js/stepplayer.js"></script>
+</body>
+</html>

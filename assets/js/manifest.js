@@ -140,7 +140,6 @@ window.SITE_MANIFEST = {
       slug: "11-llm-era",
       num: "M11",
       title: "The LLM Era",
-      coming: true,
       pages: [
         { slug: "sampling-temperature-top-p", title: "Sampling: Temperature & Top-p" },
         { slug: "context-windows-and-kv-cache", title: "Context Windows & the KV Cache" },
@@ -154,7 +153,6 @@ window.SITE_MANIFEST = {
       slug: "12-your-stack",
       num: "M12",
       title: "Demystifying Your Own Stack",
-      coming: true,
       pages: [
         { slug: "rag-internals", title: "RAG Internals" },
         { slug: "reranking-and-retrieval-quality", title: "Reranking & Retrieval Quality" },
